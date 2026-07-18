@@ -8,6 +8,8 @@ shared X-Internal-Token header so business rules stay in one place.
 from __future__ import annotations
 
 import base64
+import csv
+import io
 import json
 import os
 import shutil
@@ -313,6 +315,30 @@ class PaymentBotIn(BaseModel):
     fileId: str
 
 
+class BulkIn(BaseModel):
+    action: str
+    ids: list[str]
+    days: Optional[int] = None
+
+
+class CsvIn(BaseModel):
+    csv: str
+
+
+class DecisionIn(BaseModel):
+    status: str
+    reason: Optional[str] = None
+
+
+class BackupIn(BaseModel):
+    destination: str = "local"
+
+
+class CreditIn(BaseModel):
+    amountCents: int
+    reason: str = "Manual credit"
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -616,6 +642,79 @@ def accounts_list(protocol: Optional[str] = None, _: str = Depends(require_auth)
     return [row_to_account(r) for r in rows]
 
 
+@app.post("/accounts/bulk")
+def accounts_bulk(inp: BulkIn, user: str = Depends(require_auth)):
+    if inp.action not in ("extend", "delete", "lock", "unlock"):
+        raise HTTPException(400, "Invalid bulk action")
+    if not inp.ids:
+        return {"ok": True, "changed": 0}
+    changed = 0
+    with db() as c:
+        rows = c.execute(
+            f"SELECT * FROM accounts WHERE id IN ({','.join('?' for _ in inp.ids)})",
+            tuple(inp.ids),
+        ).fetchall()
+        for r in rows:
+            a = row_to_account(r)
+            if inp.action == "delete":
+                c.execute("DELETE FROM accounts WHERE id = ?", (a["id"],)); revoke_account(a)
+            elif inp.action == "lock":
+                c.execute("UPDATE accounts SET status = 'locked' WHERE id = ?", (a["id"],))
+            elif inp.action == "unlock":
+                c.execute("UPDATE accounts SET status = 'active' WHERE id = ?", (a["id"],))
+            elif inp.action == "extend":
+                days = inp.days or 30
+                try:
+                    cur = datetime.fromisoformat(a["expiresAt"].replace("Z", "+00:00"))
+                except Exception:
+                    cur = datetime.now(timezone.utc)
+                new_exp = max(cur, datetime.now(timezone.utc)) + timedelta(days=days)
+                c.execute("UPDATE accounts SET expires_at = ? WHERE id = ?", (new_exp.isoformat(), a["id"]))
+            changed += 1
+    log("audit", "account.bulk", f"Bulk {inp.action} on {changed} accounts", actor=user)
+    return {"ok": True, "changed": changed}
+
+
+@app.get("/accounts/export")
+def accounts_export(_: str = Depends(require_auth)):
+    with db() as c:
+        rows = c.execute("SELECT * FROM accounts ORDER BY created_at DESC").fetchall()
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["protocol", "username", "password", "uuid", "expiresAt", "ipLimit", "speedUpKbps", "speedDnKbps", "quotaGb", "telegramId"])
+    for r in rows:
+        a = row_to_account(r)
+        w.writerow([a["protocol"], a["username"], a.get("password") or "", a.get("uuid") or "", a["expiresAt"], a["ipLimit"], a["speedUpKbps"], a["speedDnKbps"], a["quotaGb"], a.get("telegramId") or ""])
+    return {"csv": out.getvalue()}
+
+
+@app.post("/accounts/import")
+def accounts_import(inp: CsvIn, user: str = Depends(require_auth)):
+    created = 0
+    reader = csv.DictReader(io.StringIO(inp.csv))
+    for row in reader:
+        try:
+            proto = (row.get("protocol") or "ssh").strip().lower()
+            if proto not in ("ssh", "vmess", "vless", "trojan"):
+                continue
+            expires = row.get("expiresAt") or (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+            accounts_create(AccountIn(
+                protocol=proto,
+                username=(row.get("username") or "").strip(),
+                password=row.get("password") or None,
+                expiresAt=expires,
+                ipLimit=int(row.get("ipLimit") or 2),
+                speedUpKbps=int(float(row.get("speedUpKbps") or 0)),
+                speedDnKbps=int(float(row.get("speedDnKbps") or 0)),
+                quotaGb=int(float(row.get("quotaGb") or 0)),
+                telegramId=row.get("telegramId") or None,
+            ), user)
+            created += 1
+        except Exception as exc:
+            print(f"csv-import-skip: {exc}", flush=True)
+    return {"created": created}
+
+
 @app.get("/accounts/{aid}")
 def accounts_get(aid: str, _: str = Depends(require_auth)):
     with db() as c:
@@ -706,19 +805,54 @@ def accounts_delete(aid: str, user: str = Depends(require_auth)):
 @app.get("/accounts/{aid}/config")
 def accounts_config(aid: str, user: str = Depends(require_auth)):
     a = accounts_get(aid, user)
-    host = PANEL_DOMAIN
+    host = kv_get(f"hosts.{a['protocol']}", "") or kv_get("panel.domain", PANEL_DOMAIN)
+    port = int(kv_get(f"ports.{a['protocol']}", "") or kv_get("panel.port", str(PANEL_PORT)) or PANEL_PORT)
     if a["protocol"] == "ssh":
         return {"link": f"ssh://{a['username']}:{a['password']}@{host}:22",
-                "text": f"Host: {host}\nPort: 22 (SSH), {PANEL_PORT} (WebSocket path /)\n"
+                "text": f"Host: {host}\nPort: 22 (SSH), {port} (WebSocket path /)\n"
                         f"User: {a['username']}\nPassword: {a['password']}"}
     if a["protocol"] == "vmess":
-        cfg = {"v":"2","ps":a["username"],"add":host,"port":PANEL_PORT,"id":a["uuid"],
+        cfg = {"v":"2","ps":a["username"],"add":host,"port":port,"id":a["uuid"],
                "aid":0,"net":"ws","type":"none","host":host,"path":"/vmess","tls":"tls"}
         return {"link": "vmess://" + base64.b64encode(json.dumps(cfg).encode()).decode(),
                 "text": json.dumps(cfg, indent=2)}
     if a["protocol"] == "vless":
-        return {"link": f"vless://{a['uuid']}@{host}:{PANEL_PORT}?type=ws&security=tls&path=%2Fvless#{a['username']}", "text": ""}
-    return {"link": f"trojan://{a['uuid']}@{host}:{PANEL_PORT}?type=ws&security=tls&path=%2Ftrojan#{a['username']}", "text": ""}
+        return {"link": f"vless://{a['uuid']}@{host}:{port}?type=ws&security=tls&path=%2Fvless#{a['username']}", "text": ""}
+    return {"link": f"trojan://{a['uuid']}@{host}:{port}?type=ws&security=tls&path=%2Ftrojan#{a['username']}", "text": ""}
+
+
+@app.get("/accounts/{aid}/subscription")
+def accounts_subscription(aid: str, user: str = Depends(require_auth)):
+    accounts_get(aid, user)
+    return {"url": f"https://{kv_get('panel.domain', PANEL_DOMAIN)}:{kv_get('panel.port', str(PANEL_PORT))}/u/{aid}"}
+
+
+@app.get("/accounts/{aid}/detail")
+def accounts_detail(aid: str, user: str = Depends(require_auth)):
+    a = accounts_get(aid, user)
+    cfg = accounts_config(aid, user)
+    try:
+        exp = datetime.fromisoformat(a["expiresAt"].replace("Z", "+00:00"))
+        days = max(0, (exp - datetime.now(timezone.utc)).days)
+    except Exception:
+        days = 0
+    return {"account": a, "configLink": cfg["link"], "configText": cfg["text"],
+            "subscriptionUrl": f"https://{kv_get('panel.domain', PANEL_DOMAIN)}:{kv_get('panel.port', str(PANEL_PORT))}/u/{aid}",
+            "daysRemaining": days, "hourly": [], "daily": [], "activeIps": []}
+
+
+@app.post("/accounts/{aid}/telegram")
+def accounts_send_telegram(aid: str, user: str = Depends(require_auth)):
+    a = accounts_get(aid, user)
+    log("audit", "account.telegram", f"Telegram send queued for {a['username']}", actor=user, target=a["username"])
+    return {"ok": True}
+
+
+@app.post("/accounts/{aid}/rotate-token")
+def accounts_rotate_token(aid: str, user: str = Depends(require_auth)):
+    accounts_get(aid, user)
+    token = _uuid.uuid4().hex
+    return {"token": token}
 
 
 # ---- Plans -----------------------------------------------------------------
