@@ -1,5 +1,5 @@
 """
-SSH-over-WebSocket bridge on 127.0.0.1:2095.
+SSH-over-WebSocket bridge on 127.0.0.1:10000.
 
 Nginx upgrades WebSocket connections arriving at "/" to this port. Each
 connection is transparently proxied to 127.0.0.1:22 so any SSH client that
@@ -16,7 +16,7 @@ import websockets
 logging.basicConfig(level=logging.INFO, format="ssh-ws %(levelname)s %(message)s")
 
 SSH_HOST, SSH_PORT = "127.0.0.1", 22
-LISTEN_HOST, LISTEN_PORT = "127.0.0.1", 2095
+LISTEN_HOST, LISTEN_PORT = "127.0.0.1", 10000
 
 
 async def pipe_ws_to_tcp(ws, writer):

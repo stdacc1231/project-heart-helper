@@ -8,11 +8,56 @@ XRAY_CFG_DIR="/usr/local/etc/xray"
 XRAY_CFG="${XRAY_CFG_DIR}/config.json"
 LOG_DIR="/var/log/xray"
 
-# 1) Install xray (official installer). Idempotent.
+# 1) Install xray-core. Try the official installer first, then a direct
+# GitHub release fallback so old VPS images still self-heal during update.
+install_xray_fallback() {
+  local arch asset tmp
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64) asset="Xray-linux-64.zip" ;;
+    aarch64|arm64) asset="Xray-linux-arm64-v8a.zip" ;;
+    armv7l|armv7*) asset="Xray-linux-arm32-v7a.zip" ;;
+    *) echo "[xray] unsupported CPU arch: $arch" >&2; return 1 ;;
+  esac
+  tmp="$(mktemp -d)"
+  curl -fL "https://github.com/XTLS/Xray-core/releases/latest/download/${asset}" -o "$tmp/xray.zip"
+  unzip -qo "$tmp/xray.zip" -d "$tmp/xray"
+  install -m 755 "$tmp/xray/xray" /usr/local/bin/xray
+  mkdir -p /usr/local/share/xray
+  [[ -f "$tmp/xray/geoip.dat" ]] && install -m 644 "$tmp/xray/geoip.dat" /usr/local/share/xray/geoip.dat
+  [[ -f "$tmp/xray/geosite.dat" ]] && install -m 644 "$tmp/xray/geosite.dat" /usr/local/share/xray/geosite.dat
+  rm -rf "$tmp"
+}
+
 if ! command -v xray >/dev/null 2>&1; then
   echo "[xray] installing xray-core"
-  bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+  if ! bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install; then
+    echo "[xray] official installer failed, trying direct release fallback"
+    install_xray_fallback
+  fi
 fi
+
+cat >/etc/systemd/system/xray.service <<'EOF'
+[Unit]
+Description=Xray Service
+Documentation=https://github.com/xtls
+After=network.target nss-lookup.target
+
+[Service]
+User=root
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ExecStart=/usr/local/bin/xray run -config /usr/local/etc/xray/config.json
+Restart=on-failure
+RestartPreventExitStatus=23
+LimitNPROC=10000
+LimitNOFILE=1000000
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
 
 mkdir -p "$XRAY_CFG_DIR" "$LOG_DIR"
 

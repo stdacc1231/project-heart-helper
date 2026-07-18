@@ -279,6 +279,13 @@ systemctl enable --now nginx
 systemctl reload-or-restart nginx
 
 # --------------------------------------------------------------------------
+if [[ -x "$INSTALL_ROOT/backend/scripts/setup_xray.sh" ]]; then
+  say "Installing/configuring xray-core"
+  PANEL_DOMAIN="$PANEL_DOMAIN" CERT_DIR="$CERT_DIR" \
+    bash "$INSTALL_ROOT/backend/scripts/setup_xray.sh" || warn "xray setup failed; run: autoscript repair-services"
+fi
+
+# --------------------------------------------------------------------------
 say "Installing systemd units"
 install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-agent.service"    /etc/systemd/system/
 install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-ssh-ws.service"   /etc/systemd/system/
@@ -288,13 +295,6 @@ install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-ip-limit.timer"   /etc/
 install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-web.service"      /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now autoscript-agent autoscript-ssh-ws autoscript-bot autoscript-ip-limit.timer autoscript-web
-
-# --------------------------------------------------------------------------
-if [[ -x "$INSTALL_ROOT/backend/scripts/setup_xray.sh" ]]; then
-  say "Configuring xray"
-  PANEL_DOMAIN="$PANEL_DOMAIN" CERT_DIR="$CERT_DIR" \
-    bash "$INSTALL_ROOT/backend/scripts/setup_xray.sh" || true
-fi
 
 # --------------------------------------------------------------------------
 say "Configuring fail2ban"
