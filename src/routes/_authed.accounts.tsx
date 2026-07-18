@@ -27,8 +27,8 @@ function AccountsPage() {
   const [proto, setProto] = useState<Protocol | "all">("all");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  const [trialOpen, setTrialOpen] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const importRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["accounts", proto],
