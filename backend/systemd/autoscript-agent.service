@@ -13,13 +13,13 @@ ExecStart=/opt/autoscript/backend/.venv/bin/uvicorn main:app \
     --proxy-headers --forwarded-allow-ips=*
 Restart=on-failure
 RestartSec=3
-# Hardening — the agent still needs root for tc/useradd/systemctl.
+# The agent provisions local SSH users, updates xray/nginx, and applies tc rules.
 User=root
 NoNewPrivileges=false
-ProtectSystem=full
-ProtectHome=true
+ProtectSystem=false
+ProtectHome=false
 PrivateTmp=true
-ReadWritePaths=/etc/autoscript /opt/autoscript /usr/local/etc/xray /var/log /tmp
+ReadWritePaths=/etc /home /opt/autoscript /usr/local/etc/xray /var/log /tmp
 LimitNOFILE=65535
 
 [Install]
