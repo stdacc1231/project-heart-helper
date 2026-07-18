@@ -905,7 +905,6 @@ def account_detail_payload(aid: str):
     if not r:
         raise HTTPException(404, "Not found")
     a = row_to_account(r)
-    a = accounts_get(aid, user)
     cfg = accounts_config_public(a)
     try:
         exp = datetime.fromisoformat(a["expiresAt"].replace("Z", "+00:00"))
