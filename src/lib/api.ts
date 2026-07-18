@@ -244,6 +244,7 @@ export const api = {
     async exportCsv() { return IS_PREVIEW ? mock.exportCsv() : req<{ csv: string }>("/accounts/export"); },
     async sendTelegram(id: string) { return IS_PREVIEW ? mock.sendTelegram(id) : req(`/accounts/${id}/telegram`, { method: "POST" }); },
     async detail(id: string) { return IS_PREVIEW ? mock.userDetail(id) : req<UserDetail>(`/accounts/${id}/detail`); },
+    async publicDetail(id: string) { return IS_PREVIEW ? mock.userDetail(id) : req<UserDetail>(`/public/accounts/${id}/detail`); },
     async rotateToken(id: string) { return IS_PREVIEW ? mock.rotateToken(id) : req<{ token: string }>(`/accounts/${id}/rotate-token`, { method: "POST" }); },
   },
   connections: {
