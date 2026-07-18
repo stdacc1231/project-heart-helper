@@ -237,6 +237,7 @@ UPLOAD_DIR=${CONF_DIR}/uploads
 AGENT_URL=https://127.0.0.1:${PANEL_PORT}
 CERT_FULLCHAIN=${CERT_DIR}/fullchain.pem
 CERT_KEY=${CERT_DIR}/privkey.pem
+WEB_INTERNAL_PORT=${WEB_INTERNAL_PORT}
 EOF
 chmod 600 "$CONF_DIR/agent.env"
 
