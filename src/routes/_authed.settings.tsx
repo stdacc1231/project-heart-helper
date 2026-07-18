@@ -33,7 +33,7 @@ function SettingsPage() {
     mutationFn: () => api.settings.changePassword(pwd.current, pwd.next),
     onSuccess: () => { toast.success("Password updated"); setPwd({ current: "", next: "" }); },
   });
-  const restart = (svc: string) => api.system.restart(svc).then(() => toast.success(`${svc} restarted`));
+  const restart = (svc: string) => api.system.restartService(svc).then(() => toast.success(`${svc} restarted`));
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">

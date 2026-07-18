@@ -42,7 +42,7 @@ function AccountDetail() {
     },
   });
   const sendTg = useMutation({
-    mutationFn: () => api.accounts.sendToTelegram(id),
+    mutationFn: () => api.accounts.sendTelegram(id),
     onSuccess: () => toast.success("Config sent via Telegram"),
   });
 

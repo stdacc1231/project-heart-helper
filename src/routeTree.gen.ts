@@ -12,12 +12,19 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AuthedIndexRouteImport } from './routes/_authed.index'
+import { Route as AuthedWalletRouteImport } from './routes/_authed.wallet'
 import { Route as AuthedUpdateRouteImport } from './routes/_authed.update'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed.settings'
+import { Route as AuthedResellersRouteImport } from './routes/_authed.resellers'
 import { Route as AuthedPlansRouteImport } from './routes/_authed.plans'
 import { Route as AuthedPaymentsRouteImport } from './routes/_authed.payments'
+import { Route as AuthedNodesRouteImport } from './routes/_authed.nodes'
 import { Route as AuthedLogsRouteImport } from './routes/_authed.logs'
+import { Route as AuthedInvoicesRouteImport } from './routes/_authed.invoices'
+import { Route as AuthedConnectionsRouteImport } from './routes/_authed.connections'
 import { Route as AuthedBotRouteImport } from './routes/_authed.bot'
+import { Route as AuthedBackupsRouteImport } from './routes/_authed.backups'
+import { Route as AuthedAlertsRouteImport } from './routes/_authed.alerts'
 import { Route as AuthedAccountsRouteImport } from './routes/_authed.accounts'
 import { Route as AuthedAccountsIdRouteImport } from './routes/_authed.accounts.$id'
 
@@ -35,6 +42,11 @@ const AuthedIndexRoute = AuthedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedWalletRoute = AuthedWalletRouteImport.update({
+  id: '/wallet',
+  path: '/wallet',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedUpdateRoute = AuthedUpdateRouteImport.update({
   id: '/update',
   path: '/update',
@@ -43,6 +55,11 @@ const AuthedUpdateRoute = AuthedUpdateRouteImport.update({
 const AuthedSettingsRoute = AuthedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedResellersRoute = AuthedResellersRouteImport.update({
+  id: '/resellers',
+  path: '/resellers',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedPlansRoute = AuthedPlansRouteImport.update({
@@ -55,14 +72,39 @@ const AuthedPaymentsRoute = AuthedPaymentsRouteImport.update({
   path: '/payments',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedNodesRoute = AuthedNodesRouteImport.update({
+  id: '/nodes',
+  path: '/nodes',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedLogsRoute = AuthedLogsRouteImport.update({
   id: '/logs',
   path: '/logs',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedInvoicesRoute = AuthedInvoicesRouteImport.update({
+  id: '/invoices',
+  path: '/invoices',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedConnectionsRoute = AuthedConnectionsRouteImport.update({
+  id: '/connections',
+  path: '/connections',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedBotRoute = AuthedBotRouteImport.update({
   id: '/bot',
   path: '/bot',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedBackupsRoute = AuthedBackupsRouteImport.update({
+  id: '/backups',
+  path: '/backups',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedAlertsRoute = AuthedAlertsRouteImport.update({
+  id: '/alerts',
+  path: '/alerts',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedAccountsRoute = AuthedAccountsRouteImport.update({
@@ -80,23 +122,37 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/login': typeof LoginRoute
   '/accounts': typeof AuthedAccountsRouteWithChildren
+  '/alerts': typeof AuthedAlertsRoute
+  '/backups': typeof AuthedBackupsRoute
   '/bot': typeof AuthedBotRoute
+  '/connections': typeof AuthedConnectionsRoute
+  '/invoices': typeof AuthedInvoicesRoute
   '/logs': typeof AuthedLogsRoute
+  '/nodes': typeof AuthedNodesRoute
   '/payments': typeof AuthedPaymentsRoute
   '/plans': typeof AuthedPlansRoute
+  '/resellers': typeof AuthedResellersRoute
   '/settings': typeof AuthedSettingsRoute
   '/update': typeof AuthedUpdateRoute
+  '/wallet': typeof AuthedWalletRoute
   '/accounts/$id': typeof AuthedAccountsIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/accounts': typeof AuthedAccountsRouteWithChildren
+  '/alerts': typeof AuthedAlertsRoute
+  '/backups': typeof AuthedBackupsRoute
   '/bot': typeof AuthedBotRoute
+  '/connections': typeof AuthedConnectionsRoute
+  '/invoices': typeof AuthedInvoicesRoute
   '/logs': typeof AuthedLogsRoute
+  '/nodes': typeof AuthedNodesRoute
   '/payments': typeof AuthedPaymentsRoute
   '/plans': typeof AuthedPlansRoute
+  '/resellers': typeof AuthedResellersRoute
   '/settings': typeof AuthedSettingsRoute
   '/update': typeof AuthedUpdateRoute
+  '/wallet': typeof AuthedWalletRoute
   '/': typeof AuthedIndexRoute
   '/accounts/$id': typeof AuthedAccountsIdRoute
 }
@@ -105,12 +161,19 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authed/accounts': typeof AuthedAccountsRouteWithChildren
+  '/_authed/alerts': typeof AuthedAlertsRoute
+  '/_authed/backups': typeof AuthedBackupsRoute
   '/_authed/bot': typeof AuthedBotRoute
+  '/_authed/connections': typeof AuthedConnectionsRoute
+  '/_authed/invoices': typeof AuthedInvoicesRoute
   '/_authed/logs': typeof AuthedLogsRoute
+  '/_authed/nodes': typeof AuthedNodesRoute
   '/_authed/payments': typeof AuthedPaymentsRoute
   '/_authed/plans': typeof AuthedPlansRoute
+  '/_authed/resellers': typeof AuthedResellersRoute
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/update': typeof AuthedUpdateRoute
+  '/_authed/wallet': typeof AuthedWalletRoute
   '/_authed/': typeof AuthedIndexRoute
   '/_authed/accounts/$id': typeof AuthedAccountsIdRoute
 }
@@ -120,23 +183,37 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/accounts'
+    | '/alerts'
+    | '/backups'
     | '/bot'
+    | '/connections'
+    | '/invoices'
     | '/logs'
+    | '/nodes'
     | '/payments'
     | '/plans'
+    | '/resellers'
     | '/settings'
     | '/update'
+    | '/wallet'
     | '/accounts/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
     | '/accounts'
+    | '/alerts'
+    | '/backups'
     | '/bot'
+    | '/connections'
+    | '/invoices'
     | '/logs'
+    | '/nodes'
     | '/payments'
     | '/plans'
+    | '/resellers'
     | '/settings'
     | '/update'
+    | '/wallet'
     | '/'
     | '/accounts/$id'
   id:
@@ -144,12 +221,19 @@ export interface FileRouteTypes {
     | '/_authed'
     | '/login'
     | '/_authed/accounts'
+    | '/_authed/alerts'
+    | '/_authed/backups'
     | '/_authed/bot'
+    | '/_authed/connections'
+    | '/_authed/invoices'
     | '/_authed/logs'
+    | '/_authed/nodes'
     | '/_authed/payments'
     | '/_authed/plans'
+    | '/_authed/resellers'
     | '/_authed/settings'
     | '/_authed/update'
+    | '/_authed/wallet'
     | '/_authed/'
     | '/_authed/accounts/$id'
   fileRoutesById: FileRoutesById
@@ -182,6 +266,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedIndexRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/wallet': {
+      id: '/_authed/wallet'
+      path: '/wallet'
+      fullPath: '/wallet'
+      preLoaderRoute: typeof AuthedWalletRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/update': {
       id: '/_authed/update'
       path: '/update'
@@ -194,6 +285,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AuthedSettingsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/resellers': {
+      id: '/_authed/resellers'
+      path: '/resellers'
+      fullPath: '/resellers'
+      preLoaderRoute: typeof AuthedResellersRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/plans': {
@@ -210,6 +308,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedPaymentsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/nodes': {
+      id: '/_authed/nodes'
+      path: '/nodes'
+      fullPath: '/nodes'
+      preLoaderRoute: typeof AuthedNodesRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/logs': {
       id: '/_authed/logs'
       path: '/logs'
@@ -217,11 +322,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedLogsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/invoices': {
+      id: '/_authed/invoices'
+      path: '/invoices'
+      fullPath: '/invoices'
+      preLoaderRoute: typeof AuthedInvoicesRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/connections': {
+      id: '/_authed/connections'
+      path: '/connections'
+      fullPath: '/connections'
+      preLoaderRoute: typeof AuthedConnectionsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/bot': {
       id: '/_authed/bot'
       path: '/bot'
       fullPath: '/bot'
       preLoaderRoute: typeof AuthedBotRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/backups': {
+      id: '/_authed/backups'
+      path: '/backups'
+      fullPath: '/backups'
+      preLoaderRoute: typeof AuthedBackupsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/alerts': {
+      id: '/_authed/alerts'
+      path: '/alerts'
+      fullPath: '/alerts'
+      preLoaderRoute: typeof AuthedAlertsRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/accounts': {
@@ -255,23 +388,37 @@ const AuthedAccountsRouteWithChildren = AuthedAccountsRoute._addFileChildren(
 
 interface AuthedRouteChildren {
   AuthedAccountsRoute: typeof AuthedAccountsRouteWithChildren
+  AuthedAlertsRoute: typeof AuthedAlertsRoute
+  AuthedBackupsRoute: typeof AuthedBackupsRoute
   AuthedBotRoute: typeof AuthedBotRoute
+  AuthedConnectionsRoute: typeof AuthedConnectionsRoute
+  AuthedInvoicesRoute: typeof AuthedInvoicesRoute
   AuthedLogsRoute: typeof AuthedLogsRoute
+  AuthedNodesRoute: typeof AuthedNodesRoute
   AuthedPaymentsRoute: typeof AuthedPaymentsRoute
   AuthedPlansRoute: typeof AuthedPlansRoute
+  AuthedResellersRoute: typeof AuthedResellersRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedUpdateRoute: typeof AuthedUpdateRoute
+  AuthedWalletRoute: typeof AuthedWalletRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedAccountsRoute: AuthedAccountsRouteWithChildren,
+  AuthedAlertsRoute: AuthedAlertsRoute,
+  AuthedBackupsRoute: AuthedBackupsRoute,
   AuthedBotRoute: AuthedBotRoute,
+  AuthedConnectionsRoute: AuthedConnectionsRoute,
+  AuthedInvoicesRoute: AuthedInvoicesRoute,
   AuthedLogsRoute: AuthedLogsRoute,
+  AuthedNodesRoute: AuthedNodesRoute,
   AuthedPaymentsRoute: AuthedPaymentsRoute,
   AuthedPlansRoute: AuthedPlansRoute,
+  AuthedResellersRoute: AuthedResellersRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedUpdateRoute: AuthedUpdateRoute,
+  AuthedWalletRoute: AuthedWalletRoute,
   AuthedIndexRoute: AuthedIndexRoute,
 }
 
