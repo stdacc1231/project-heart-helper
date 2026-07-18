@@ -368,6 +368,17 @@ async def _panel_gate(request: Request, call_next):
         # Requests that use the secret prefix: strip it and mint the cookie.
         if under_pfx:
             new_path = path[len(pfx):] or "/"
+            accept = request.headers.get("accept", "")
+            if request.method in ("GET", "HEAD") and "text/html" in accept:
+                from starlette.responses import RedirectResponse as _Redirect
+                target = new_path
+                if request.url.query:
+                    target += "?" + request.url.query
+                resp = _Redirect(target, status_code=302)
+                resp.set_cookie("panel_gate", _gate_token(),
+                                httponly=True, secure=True, samesite="lax",
+                                max_age=60 * 60 * 24 * 30)
+                return resp
             scope["path"] = new_path
             raw = scope.get("raw_path")
             if isinstance(raw, (bytes, bytearray)) and raw.startswith(pfx.encode()):
