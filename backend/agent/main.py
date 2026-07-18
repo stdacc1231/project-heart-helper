@@ -650,7 +650,11 @@ def system_restart(svc: str, user: str = Depends(require_auth)):
 
 @app.post("/system/repair")
 def system_repair(user: str = Depends(require_auth)):
-    cmd = "nohup /usr/local/bin/autoscript repair-services >> /var/log/autoscript-repair.log 2>&1 &"
+    cli = "/usr/local/bin/autoscript"
+    repo_cli = INSTALL_ROOT / "backend" / "cli.sh"
+    if repo_cli.exists():
+        subprocess.run(["install", "-m", "755", str(repo_cli), cli], check=False)
+    cmd = f"nohup {cli} repair-services >> /var/log/autoscript-repair.log 2>&1 &"
     subprocess.Popen(["bash", "-lc", cmd], start_new_session=True)
     log("audit", "system.repair", "Service repair queued", actor=user, level="warn")
     return {"ok": True}

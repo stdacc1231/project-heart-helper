@@ -217,6 +217,10 @@ update_now() {
   say "git fetch && reset --hard origin/main"
   git fetch --all --prune
   git reset --hard origin/main
+  if [[ -f "$INSTALL_ROOT/backend/cli.sh" ]]; then
+    install -m 755 "$INSTALL_ROOT/backend/cli.sh" /usr/local/bin/autoscript
+    ok "Admin CLI refreshed at /usr/local/bin/autoscript"
+  fi
   if [[ -f backend/scripts/migrate.sh ]]; then bash backend/scripts/migrate.sh || warn "migrate failed"; fi
   "$INSTALL_ROOT/backend/.venv/bin/pip" install -q -r "$INSTALL_ROOT/backend/agent/requirements.txt" || true
   apt-get update -y >/dev/null 2>&1 || true
@@ -339,11 +343,12 @@ case "${1:-}" in
   set-repo)       change_repo_url ;;
   update)         update_now ;;
   restart)        restart_services ;;
+  repair)         repair_services ;;
   repair-services) repair_services ;;
   logs)           view_logs ;;
   backup)         backup_now ;;
   set-bot)        reset_bot ;;
   uninstall)      uninstall_all ;;
   ""|menu)        menu ;;
-  *) echo "usage: autoscript [status|reset-user|reset-pass|set-domain|set-port|set-path|set-repo|update|restart|repair-services|logs|backup|set-bot|uninstall]"; exit 1;;
+  *) echo "usage: autoscript [status|reset-user|reset-pass|set-domain|set-port|set-path|set-repo|update|restart|repair|repair-services|logs|backup|set-bot|uninstall]"; exit 1;;
 esac
