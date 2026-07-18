@@ -17,7 +17,6 @@ import { Route as AuthedUpdateRouteImport } from './routes/_authed.update'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed.settings'
 import { Route as AuthedPlansRouteImport } from './routes/_authed.plans'
 import { Route as AuthedPaymentsRouteImport } from './routes/_authed.payments'
-import { Route as AuthedNodesRouteImport } from './routes/_authed.nodes'
 import { Route as AuthedLogsRouteImport } from './routes/_authed.logs'
 import { Route as AuthedInvoicesRouteImport } from './routes/_authed.invoices'
 import { Route as AuthedConnectionsRouteImport } from './routes/_authed.connections'
@@ -64,11 +63,6 @@ const AuthedPlansRoute = AuthedPlansRouteImport.update({
 const AuthedPaymentsRoute = AuthedPaymentsRouteImport.update({
   id: '/payments',
   path: '/payments',
-  getParentRoute: () => AuthedRoute,
-} as any)
-const AuthedNodesRoute = AuthedNodesRouteImport.update({
-  id: '/nodes',
-  path: '/nodes',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedLogsRoute = AuthedLogsRouteImport.update({
@@ -122,7 +116,6 @@ export interface FileRoutesByFullPath {
   '/connections': typeof AuthedConnectionsRoute
   '/invoices': typeof AuthedInvoicesRoute
   '/logs': typeof AuthedLogsRoute
-  '/nodes': typeof AuthedNodesRoute
   '/payments': typeof AuthedPaymentsRoute
   '/plans': typeof AuthedPlansRoute
   '/settings': typeof AuthedSettingsRoute
@@ -139,7 +132,6 @@ export interface FileRoutesByTo {
   '/connections': typeof AuthedConnectionsRoute
   '/invoices': typeof AuthedInvoicesRoute
   '/logs': typeof AuthedLogsRoute
-  '/nodes': typeof AuthedNodesRoute
   '/payments': typeof AuthedPaymentsRoute
   '/plans': typeof AuthedPlansRoute
   '/settings': typeof AuthedSettingsRoute
@@ -159,7 +151,6 @@ export interface FileRoutesById {
   '/_authed/connections': typeof AuthedConnectionsRoute
   '/_authed/invoices': typeof AuthedInvoicesRoute
   '/_authed/logs': typeof AuthedLogsRoute
-  '/_authed/nodes': typeof AuthedNodesRoute
   '/_authed/payments': typeof AuthedPaymentsRoute
   '/_authed/plans': typeof AuthedPlansRoute
   '/_authed/settings': typeof AuthedSettingsRoute
@@ -180,7 +171,6 @@ export interface FileRouteTypes {
     | '/connections'
     | '/invoices'
     | '/logs'
-    | '/nodes'
     | '/payments'
     | '/plans'
     | '/settings'
@@ -197,7 +187,6 @@ export interface FileRouteTypes {
     | '/connections'
     | '/invoices'
     | '/logs'
-    | '/nodes'
     | '/payments'
     | '/plans'
     | '/settings'
@@ -216,7 +205,6 @@ export interface FileRouteTypes {
     | '/_authed/connections'
     | '/_authed/invoices'
     | '/_authed/logs'
-    | '/_authed/nodes'
     | '/_authed/payments'
     | '/_authed/plans'
     | '/_authed/settings'
@@ -287,13 +275,6 @@ declare module '@tanstack/react-router' {
       path: '/payments'
       fullPath: '/payments'
       preLoaderRoute: typeof AuthedPaymentsRouteImport
-      parentRoute: typeof AuthedRoute
-    }
-    '/_authed/nodes': {
-      id: '/_authed/nodes'
-      path: '/nodes'
-      fullPath: '/nodes'
-      preLoaderRoute: typeof AuthedNodesRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/logs': {
@@ -375,7 +356,6 @@ interface AuthedRouteChildren {
   AuthedConnectionsRoute: typeof AuthedConnectionsRoute
   AuthedInvoicesRoute: typeof AuthedInvoicesRoute
   AuthedLogsRoute: typeof AuthedLogsRoute
-  AuthedNodesRoute: typeof AuthedNodesRoute
   AuthedPaymentsRoute: typeof AuthedPaymentsRoute
   AuthedPlansRoute: typeof AuthedPlansRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
@@ -392,7 +372,6 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedConnectionsRoute: AuthedConnectionsRoute,
   AuthedInvoicesRoute: AuthedInvoicesRoute,
   AuthedLogsRoute: AuthedLogsRoute,
-  AuthedNodesRoute: AuthedNodesRoute,
   AuthedPaymentsRoute: AuthedPaymentsRoute,
   AuthedPlansRoute: AuthedPlansRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
@@ -411,13 +390,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
