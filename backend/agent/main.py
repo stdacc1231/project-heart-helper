@@ -877,14 +877,15 @@ def settings_get(_: str = Depends(require_auth)):
         if port.isdigit():
             ep["port"] = int(port)
         endpoints[proto] = ep
+    panel_port = kv_get("panel.port", str(PANEL_PORT))
     return {
-        "domain": PANEL_DOMAIN,
-        "port": PANEL_PORT,
+        "domain": kv_get("panel.domain", PANEL_DOMAIN),
+        "port": int(panel_port) if str(panel_port).isdigit() else PANEL_PORT,
         "tlsMode": kv_get("panel.tlsMode", "single"),
         "dnsProvider": kv_get("panel.dnsProvider", ""),
         "rootDomain": kv_get("panel.rootDomain", ""),
         "dbPath": DB_PATH,
-        "repoUrl": REPO_URL,
+        "repoUrl": kv_get("panel.repoUrl", REPO_URL),
         "tlsPorts": tls_ports,
         "plainPorts": plain_ports,
         "endpoints": endpoints,
