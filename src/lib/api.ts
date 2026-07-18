@@ -260,10 +260,6 @@ export const api = {
     async list() { return IS_PREVIEW ? mock.listInvoices() : req<Invoice[]>("/invoices"); },
     async send(id: string, via: "email" | "telegram") { return IS_PREVIEW ? mock.sendInvoice(id, via) : req(`/invoices/${id}/send`, { method: "POST", body: JSON.stringify({ via }) }); },
   },
-  resellers: {
-    async list() { return IS_PREVIEW ? mock.listResellers() : req<Reseller[]>("/resellers"); },
-    async save(r: Partial<Reseller>) { return IS_PREVIEW ? mock.saveReseller(r) : req<Reseller>("/resellers", { method: "POST", body: JSON.stringify(r) }); },
-  },
   plans: {
     async list() { return IS_PREVIEW ? mock.listPlans() : req<Plan[]>("/plans"); },
     async save(p: Partial<Plan>) { return IS_PREVIEW ? mock.savePlan(p) : req<Plan>("/plans", { method: p.id ? "PATCH" : "POST", body: JSON.stringify(p) }); },
