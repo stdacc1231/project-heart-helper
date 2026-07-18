@@ -304,3 +304,84 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
     </Dialog>
   );
 }
+
+function TrialDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
+  const [hours, setHours] = useState<number>(1);
+  const [protocol, setProtocol] = useState<Protocol>("ssh");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [telegramId, setTelegramId] = useState("");
+  const [ipLimit, setIpLimit] = useState(1);
+  const qc = useQueryClient();
+  const create = useMutation({
+    mutationFn: () => api.accounts.create({
+      protocol, username, password, telegramId: telegramId || undefined,
+      ipLimit, speedUpKbps: 0, speedDnKbps: 0, quotaGb: 0,
+      trial: true,
+      expiresAt: new Date(Date.now() + Math.max(1, hours) * 3600_000).toISOString(),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      toast.success(`Trial account created (${hours}h)`);
+      onOpenChange(false);
+      setUsername(""); setPassword(""); setTelegramId("");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Clock className="h-4 w-4 text-accent" /> New trial user</DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Protocol</Label>
+            <Select value={protocol} onValueChange={(v) => setProtocol(v as Protocol)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {(["ssh", "vmess", "vless", "trojan"] as Protocol[]).map((p) => (
+                  <SelectItem key={p} value={p}>{PROTOCOL_LABELS[p]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Duration (hours)</Label>
+            <div className="flex items-center gap-1">
+              <Input type="number" min={1} value={hours} onChange={(e) => setHours(Math.max(1, +e.target.value || 1))} />
+              <Button type="button" size="sm" variant="outline" onClick={() => setHours(1)}>1h</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setHours(3)}>3h</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setHours(24)}>24h</Button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Username</Label>
+            <Input value={username} onChange={(e) => setUsername(e.target.value)} />
+          </div>
+          {protocol === "ssh" && (
+            <div className="space-y-1.5">
+              <Label>Password</Label>
+              <Input value={password} onChange={(e) => setPassword(e.target.value)} />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label>Telegram ID</Label>
+            <Input placeholder="optional" value={telegramId} onChange={(e) => setTelegramId(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>IP limit</Label>
+            <Input type="number" min={1} value={ipLimit} onChange={(e) => setIpLimit(+e.target.value || 1)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={() => create.mutate()} disabled={!username || create.isPending}>
+            {create.isPending ? "Creating…" : `Create trial (${hours}h)`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
