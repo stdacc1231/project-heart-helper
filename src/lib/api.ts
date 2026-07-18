@@ -1,19 +1,13 @@
 // Web UI -> Python Agent API client with Lovable-preview mock fallback.
 
 export type Protocol =
-  | "ssh" | "vmess" | "vless" | "trojan"
-  | "shadowsocks" | "hysteria2" | "tuic" | "wireguard" | "reality";
+  | "ssh" | "vmess" | "vless" | "trojan";
 
 export const PROTOCOL_LABELS: Record<Protocol, string> = {
   ssh: "SSH / WS",
   vmess: "VMess",
   vless: "VLESS",
   trojan: "Trojan",
-  shadowsocks: "Shadowsocks",
-  hysteria2: "Hysteria2",
-  tuic: "TUIC",
-  wireguard: "WireGuard",
-  reality: "VLESS-Reality",
 };
 
 export interface Account {
@@ -222,7 +216,7 @@ export const api = {
     async traffic(range: "1h" | "24h" | "7d" = "24h") { return IS_PREVIEW ? mock.traffic(range) : req<TrafficPoint[]>(`/system/traffic?range=${range}`); },
     async version() { return IS_PREVIEW ? mock.version() : req<VersionInfo>("/system/version"); },
     async update() { return IS_PREVIEW ? mock.update() : req<{ ok: true; commit: string }>("/system/update", { method: "POST" }); },
-    async restartService(name: string) { return IS_PREVIEW ? mock.restartService(name) : req(`/system/services/${name}/restart`, { method: "POST" }); },
+    async restartService(name: string) { return IS_PREVIEW ? mock.restartService(name) : req(`/system/restart/${name}`, { method: "POST" }); },
     async runSpeedtest() { return IS_PREVIEW ? mock.speedtest() : req<{ downMbps: number; upMbps: number; pingMs: number }>("/system/speedtest", { method: "POST" }); },
     async toggleBbr(on: boolean) { return IS_PREVIEW ? mock.toggleBbr(on) : req("/system/bbr", { method: "POST", body: JSON.stringify({ on }) }); },
   },

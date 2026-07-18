@@ -21,7 +21,7 @@ export const Route = createFileRoute("/_authed/accounts")({
   component: AccountsPage,
 });
 
-const PROTOCOLS: (Protocol | "all")[] = ["all", "ssh", "vmess", "vless", "trojan", "shadowsocks", "hysteria2", "tuic", "wireguard", "reality"];
+const PROTOCOLS: (Protocol | "all")[] = ["all", "ssh", "vmess", "vless", "trojan"];
 
 function AccountsPage() {
   const [proto, setProto] = useState<Protocol | "all">("all");
@@ -237,7 +237,7 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
             <Select value={f.protocol} onValueChange={(v) => setF({ ...f, protocol: v as Protocol })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {(["ssh", "vmess", "vless", "trojan", "shadowsocks", "hysteria2", "tuic", "wireguard", "reality"] as Protocol[]).map((p) => (
+                {(["ssh", "vmess", "vless", "trojan"] as Protocol[]).map((p) => (
                   <SelectItem key={p} value={p}>{PROTOCOL_LABELS[p]}</SelectItem>
                 ))}
               </SelectContent>
@@ -254,7 +254,7 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
             <Label>Username</Label>
             <Input value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} />
           </div>
-          {(f.protocol === "ssh" || f.protocol === "shadowsocks") && (
+          {f.protocol === "ssh" && (
             <div className="space-y-1.5">
               <Label>Password</Label>
               <Input value={f.password ?? ""} onChange={(e) => setF({ ...f, password: e.target.value })} />

@@ -6,7 +6,7 @@ import type {
 } from "./api";
 
 
-const STORAGE = "autoscript_mock_v3";
+const STORAGE = "autoscript_mock_v4";
 
 interface MockDB {
   loggedIn: boolean;
@@ -38,7 +38,7 @@ function save(db: MockDB) {
   if (typeof window !== "undefined") localStorage.setItem(STORAGE, JSON.stringify(db));
 }
 
-const PROTOS: Protocol[] = ["ssh", "vmess", "vless", "trojan", "shadowsocks", "hysteria2", "tuic", "wireguard", "reality"];
+const PROTOS: Protocol[] = ["ssh", "vmess", "vless", "trojan"];
 
 function rnd<T>(a: T[]): T { return a[Math.floor(Math.random() * a.length)]; }
 function tok() { return Math.random().toString(36).slice(2, 12); }
@@ -63,7 +63,7 @@ function seed(): MockDB {
         protocol,
         username: `${protocol}${k}`,
         password: protocol === "ssh" ? "pass" + k : undefined,
-        uuid: protocol !== "ssh" && protocol !== "wireguard" ? crypto.randomUUID() : undefined,
+        uuid: protocol !== "ssh" ? crypto.randomUUID() : undefined,
         createdAt: new Date(now - (30 - i) * day).toISOString(),
         expiresAt: new Date(now + (30 - i) * day).toISOString(),
         ipLimit: 2,
@@ -230,8 +230,8 @@ export const mock = {
     const a: Account = {
       id: `${protocol}-${Date.now()}`, protocol,
       username: input.username ?? "user",
-      password: (protocol === "ssh" || protocol === "shadowsocks") ? (input.password ?? "pass") : undefined,
-      uuid: (protocol !== "ssh" && protocol !== "wireguard" && protocol !== "shadowsocks") ? crypto.randomUUID() : undefined,
+      password: protocol === "ssh" ? (input.password ?? "pass") : undefined,
+      uuid: protocol !== "ssh" ? crypto.randomUUID() : undefined,
       createdAt: new Date().toISOString(),
       expiresAt: input.expiresAt ?? new Date(Date.now() + (trial ? 3600_000 : 30 * 86400_000)).toISOString(),
       ipLimit: input.ipLimit ?? 2,
@@ -281,11 +281,7 @@ export const mock = {
     }
     if (a.protocol === "vless")   return { link: `vless://${a.uuid}@${host}:443?type=ws&security=tls&path=%2Fvless#${a.username}`, text: "" };
     if (a.protocol === "trojan")  return { link: `trojan://${a.uuid}@${host}:443?type=ws&security=tls&path=%2Ftrojan#${a.username}`, text: "" };
-    if (a.protocol === "reality") return { link: `vless://${a.uuid}@${host}:443?security=reality&sni=www.microsoft.com&pbk=REALITY_PBK&fp=chrome#${a.username}`, text: "VLESS-Reality" };
-    if (a.protocol === "shadowsocks") return { link: `ss://${btoa("aes-256-gcm:" + a.password)}@${host}:8388#${a.username}`, text: "" };
-    if (a.protocol === "hysteria2") return { link: `hysteria2://${a.password ?? a.uuid}@${host}:36712?sni=${host}#${a.username}`, text: "" };
-    if (a.protocol === "tuic")      return { link: `tuic://${a.uuid}:${a.password ?? "pw"}@${host}:5443?alpn=h3&sni=${host}#${a.username}`, text: "" };
-    return { link: `# WireGuard config for ${a.username} — download from panel`, text: `[Interface]\nPrivateKey = ...\nAddress = 10.7.0.${(parseInt(a.id.slice(-1), 16) || 2)}/32\nDNS = 1.1.1.1\n\n[Peer]\nPublicKey = SERVER_PUB\nEndpoint = ${host}:51820\nAllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 25\n` };
+    return { link: `trojan://${a.uuid}@${host}:443?type=ws&security=tls&path=%2Ftrojan#${a.username}`, text: "" };
   },
   async subscriptionUrl(id: string) {
     const db = load(); const a = db.accounts.find((x) => x.id === id); if (!a) throw new Error("Not found");

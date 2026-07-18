@@ -1,7 +1,6 @@
 # Autoscript — All-in-One VPN Panel
 
-Modern web panel for managing **SSH-WS, VMess, VLESS, VLESS-Reality, Trojan,
-Trojan-Go, ShadowSocks, ShadowSocks-R and Hysteria2** on a single VPS.
+Modern web panel for managing **SSH-WS, VMess, VLESS and Trojan** on a single VPS.
 Built as a TanStack Start web UI on top of a Python (FastAPI) agent that
 drives the same battle-tested provisioning scripts the CLI used to run.
 
@@ -13,8 +12,7 @@ drives the same battle-tested provisioning scripts the CLI used to run.
 - Live connections view (kick), hourly traffic graphs, audit log, backups.
 - Telegram bot handles **all sales**: payment proof upload → admin approve
   → account auto-created → config + QR delivered in chat.
-- 2FA (TOTP) for admin login, browser terminal (xterm.js → agent PTY),
-  invoice PDFs, PWA + push notifications.
+- Invoices, backups, service controls and GitHub-based panel updates.
 - One-click self-update from this GitHub repo.
 
 ## Repo layout
@@ -82,8 +80,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/stdacc1231/project-heart-hel
 
 Push to `main` on this repo, then in the panel open **Update → Pull &
 Rebuild**. The agent runs `git fetch && git reset --hard origin/main`
-inside `/opt/autoscript`, applies migrations, and restarts services. The
-web UI bundle is committed under `dist/` so the VPS never needs Node.
+inside `/opt/autoscript`, rebuilds the web panel with Node 22, applies
+migrations, and restarts the agent, web server, bot, SSH-WS and Nginx.
 
 ## Per-protocol domains
 

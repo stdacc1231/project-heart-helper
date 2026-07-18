@@ -18,7 +18,7 @@ function UpdatePage() {
   const run = useMutation({
     mutationFn: () => api.system.update(),
     onSuccess: () => {
-      toast.success("Updated. Services restarted.");
+      toast.success("Update started. The panel may restart for a moment.");
       qc.invalidateQueries({ queryKey: ["version"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -54,9 +54,8 @@ function UpdatePage() {
       </Card>
 
       <Card className="p-4 text-xs text-muted-foreground">
-        Running <span className="font-mono">POST /api/system/update</span> triggers <span className="font-mono">git fetch && git reset --hard origin/main</span>{" "}
-        on the VPS, applies any migrations, and restarts <span className="font-mono">autoscript-agent</span> and <span className="font-mono">nginx</span>. The web UI
-        is served from the repo's shipped <span className="font-mono">dist/</span>, so no Node build is needed on the VPS.
+        Running <span className="font-mono">POST /api/system/update</span> starts <span className="font-mono">autoscript update</span>{" "}
+        on the VPS: it pulls GitHub, rebuilds the web panel, applies migrations, and restarts the agent, web server, bot, SSH-WS and Nginx.
       </Card>
     </div>
   );
