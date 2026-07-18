@@ -1,18 +1,17 @@
-# Nginx template — Autoscript panel.  install.sh substitutes __DOMAIN__, __PORT__,
-# __ROOT__, __CERT__.  The `/` location proxies WebSocket upgrades to the local
-# SSH-WS bridge on 127.0.0.1:2095 (HTTP/1.1 pinned); non-upgrade requests fall
-# through to the SPA so the panel loads.
+# Autoscript panel — Nginx template.
+# apply_settings.sh renders this per install/settings-save:
+#   __SERVER_NAMES__      -> space-separated panel domain + per-protocol hosts
+#   __TLS_LISTENS__       -> "listen 443 ssl http2;\n listen 2053 ssl http2;\n ..."
+#   __PLAIN_LISTENS__     -> "listen 80;\n listen 8080;\n ..."
+#   __ROOT__ __CERT__     -> install paths
 #
-# CDN-safe (Cloudflare / any reverse proxy):
-#  - real client IP is restored from CF-Connecting-IP for the Cloudflare edge
-#  - HTTP/1.1 is pinned on every upgrade block (Cloudflare and most CDNs
-#    only tunnel WebSocket on HTTP/1.1)
-#  - path "/" is used for SSH-WS so it works through CF WS orange-cloud
-#  - a stable /sub/<token> endpoint serves per-user subscription bundles
+# Key rules:
+#   - Every listener serves the SAME vhost (panel + SSH-WS + xray + /sub/).
+#   - SSH-over-WebSocket on path "/", HTTP/1.1 pinned — Cloudflare-compatible.
+#   - Cloudflare real IP restored from CF-Connecting-IP.
 
 map $http_upgrade $is_ws { default 0; websocket 1; }
 
-# Cloudflare edge ranges — set real client IP through CDN
 set_real_ip_from 173.245.48.0/20;
 set_real_ip_from 103.21.244.0/22;
 set_real_ip_from 103.22.200.0/22;
@@ -38,17 +37,36 @@ set_real_ip_from 2c0f:f248::/32;
 real_ip_header CF-Connecting-IP;
 real_ip_recursive on;
 
+# ------------------------------ Plain-HTTP / plain-WS (Cloudflare orange-cloud) ---
 server {
-    listen 80;
-    listen [::]:80;
-    server_name __DOMAIN__;
-    return 301 https://$host$request_uri;
+__PLAIN_LISTENS__
+    server_name __SERVER_NAMES__;
+    root __ROOT__/dist;
+    index index.html;
+    client_max_body_size 20m;
+
+    # SSH-WS on "/" over plain WebSocket
+    location = / {
+        if ($is_ws) { rewrite ^ /__ws last; }
+        return 301 https://$host$request_uri;
+    }
+    location /__ws {
+        internal;
+        proxy_pass         http://127.0.0.1:2095;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade    $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+        proxy_set_header   Host       $host;
+        proxy_read_timeout 7d; proxy_send_timeout 7d;
+    }
+    location /api/ { return 301 https://$host$request_uri; }
+    location /    { return 301 https://$host$request_uri; }
 }
 
+# ------------------------------ TLS (multiple CF ports) --------------------------
 server {
-    listen __PORT__ ssl http2;
-    listen [::]:__PORT__ ssl http2;
-    server_name __DOMAIN__;
+__TLS_LISTENS__
+    server_name __SERVER_NAMES__;
 
     ssl_certificate     __CERT__/fullchain.pem;
     ssl_certificate_key __CERT__/privkey.pem;
@@ -57,12 +75,9 @@ server {
 
     root __ROOT__/dist;
     index index.html;
-
     client_max_body_size 20m;
 
-    # Common upgrade headers snippet for every WS location below
-    # (Cloudflare needs proxy_http_version 1.1 to tunnel WS)
-
+    # Panel API
     location /api/ {
         proxy_pass         http://127.0.0.1:8088;
         proxy_http_version 1.1;
@@ -72,16 +87,13 @@ server {
         proxy_set_header   X-Forwarded-Proto $scheme;
     }
 
-    # Per-user subscription bundles (v2rayNG / Clash / sing-box / Shadowrocket)
-    location /sub/ {
-        proxy_pass         http://127.0.0.1:8088;
-        proxy_http_version 1.1;
-        proxy_set_header   Host              $host;
-        proxy_set_header   X-Real-IP         $remote_addr;
-    }
+    # Per-user subscription bundles + public user detail page
+    location /sub/ { proxy_pass http://127.0.0.1:8088; proxy_http_version 1.1;
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; }
+    location /u/   { proxy_pass http://127.0.0.1:8088; proxy_http_version 1.1;
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; }
 
-    # SSH over WebSocket on "/" (HTTP/1.1). Cloudflare tunnels this on plans that
-    # allow WebSockets (Free tier does — port 443 only). No random path.
+    # SSH over WebSocket on "/" (HTTP/1.1, no random path)
     location = / {
         if ($is_ws) { rewrite ^ /__ws last; }
         try_files /index.html =404;
@@ -90,11 +102,10 @@ server {
         internal;
         proxy_pass         http://127.0.0.1:2095;
         proxy_http_version 1.1;
-        proxy_set_header   Upgrade       $http_upgrade;
-        proxy_set_header   Connection    "upgrade";
-        proxy_set_header   Host          $host;
-        proxy_read_timeout 7d;
-        proxy_send_timeout 7d;
+        proxy_set_header   Upgrade    $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+        proxy_set_header   Host       $host;
+        proxy_read_timeout 7d; proxy_send_timeout 7d;
     }
 
     # xray WS paths
@@ -108,10 +119,7 @@ server {
         proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";
         proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 7d; }
 
-    # SPA fallback
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
+    location / { try_files $uri $uri/ /index.html; }
 
     access_log /var/log/nginx/autoscript-access.log;
     error_log  /var/log/nginx/autoscript-error.log;
