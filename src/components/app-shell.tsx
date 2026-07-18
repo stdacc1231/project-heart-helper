@@ -24,7 +24,6 @@ const groups: NavGroup[] = [
   { label: "Users", items: [
     { to: "/accounts",    label: "Accounts",     icon: Users },
     { to: "/plans",       label: "Plans",        icon: Package },
-    { to: "/resellers",   label: "Resellers",    icon: UsersRound },
   ]},
   { label: "Billing", items: [
     { to: "/payments",    label: "Payments",     icon: CreditCard },
