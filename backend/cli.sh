@@ -103,7 +103,7 @@ show_status() {
   echo "${BLD}Repo${RST}        : ${REPO_URL:-<none>}"
   echo "${BLD}Install dir${RST} : ${INSTALL_ROOT}"
   echo
-  for u in autoscript-agent autoscript-ssh-ws autoscript-bot nginx fail2ban; do
+  for u in autoscript-agent autoscript-web autoscript-ssh-ws autoscript-bot nginx fail2ban; do
     printf "  %-22s %s\n" "$u" "$(systemctl is-active "$u" 2>/dev/null || echo inactive)"
   done
   echo
