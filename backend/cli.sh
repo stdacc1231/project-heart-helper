@@ -60,6 +60,31 @@ pick_port() {
     echo "$p"; return
   done
 }
+node_major() { node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0; }
+ensure_node22() {
+  local major
+  major="$(node_major)"
+  if ! command -v node >/dev/null 2>&1 || [[ "$major" -lt 22 ]]; then
+    say "Installing Node.js 22 LTS for web UI build"
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    apt-get install -y nodejs
+  fi
+  major="$(node_major)"
+  [[ "$major" -ge 22 ]] || die "Node.js 22+ is required; current node is $(node -v 2>/dev/null || echo missing)."
+}
+build_web_ui() {
+  cd "$INSTALL_ROOT" || die "Install dir missing."
+  if command -v bun >/dev/null 2>&1 && [[ -f bun.lock || -f bun.lockb ]]; then
+    bun install --production=false && bun run build
+    return
+  fi
+  if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
+    npm ci --no-audit --no-fund
+  else
+    npm install --no-audit --no-fund
+  fi
+  npm run build
+}
 
 # ---------- actions ----------
 show_status() {
@@ -171,11 +196,8 @@ update_now() {
   if [[ -f backend/scripts/migrate.sh ]]; then bash backend/scripts/migrate.sh || warn "migrate failed"; fi
   "$INSTALL_ROOT/backend/.venv/bin/pip" install -q -r "$INSTALL_ROOT/backend/agent/requirements.txt" || true
   say "Rebuilding web UI"
-  if [[ -f bun.lockb ]] && command -v bun >/dev/null; then
-    bun install --production=false && bun run build || warn "SPA rebuild failed"
-  elif command -v npm >/dev/null; then
-    (npm ci --no-audit --no-fund || npm install --no-audit --no-fund) && npm run build || warn "SPA rebuild failed"
-  fi
+  ensure_node22
+  build_web_ui || warn "SPA rebuild failed"
   restart_stack
   ok "Updated to latest main."
 }

@@ -35,6 +35,33 @@ pick_port() {
     echo "$p"; return
   done
 }
+node_major() { node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0; }
+ensure_node22() {
+  local major
+  major="$(node_major)"
+  if ! command -v node >/dev/null 2>&1 || [[ "$major" -lt 22 ]]; then
+    say "Installing Node.js 22 LTS for web UI build"
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    apt-get install -y nodejs
+  fi
+  major="$(node_major)"
+  [[ "$major" -ge 22 ]] || die "Node.js 22+ is required; current node is $(node -v 2>/dev/null || echo missing)."
+}
+build_web_ui() {
+  cd "$INSTALL_ROOT"
+  if command -v bun >/dev/null 2>&1 && [[ -f bun.lock || -f bun.lockb ]]; then
+    bun install --production=false
+    bun run build
+    return
+  fi
+
+  if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
+    npm ci --no-audit --no-fund
+  else
+    npm install --no-audit --no-fund
+  fi
+  npm run build
+}
 # Read from the controlling terminal so `bash <(curl ...)` still works
 # (otherwise stdin is the piped script and every `read` hits EOF).
 if { exec 3</dev/tty; } 2>/dev/null; then :; else exec 3<&0; fi
@@ -89,11 +116,8 @@ apt-get install -y --no-install-recommends \
   nginx iproute2 iptables uuid-runtime openssl \
   fail2ban ufw unzip build-essential
 
-# Node (for building the SPA). Fetch NodeSource on demand.
-if ! command -v node >/dev/null 2>&1; then
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-  apt-get install -y nodejs
-fi
+# Node 22+ is required by the current web UI toolchain.
+ensure_node22
 
 # --------------------------------------------------------------------------
 say "Removing any Cloudflare WARP / Zero Trust remnants"
@@ -115,16 +139,7 @@ fi
 
 # --------------------------------------------------------------------------
 say "Building the web UI (npm build → dist/)"
-(
-  cd "$INSTALL_ROOT"
-  if [[ -f bun.lockb ]] && command -v bun >/dev/null; then
-    bun install --production=false
-    bun run build
-  else
-    npm ci --no-audit --no-fund || npm install --no-audit --no-fund
-    npm run build
-  fi
-) || warn "SPA build failed — panel will not load until you run 'autoscript update'."
+build_web_ui || warn "SPA build failed — panel will not load until you run 'autoscript update'."
 
 # --------------------------------------------------------------------------
 say "Installing acme.sh"
