@@ -21,6 +21,12 @@ if (!entryPath) {
 
 const mod = await import(pathToFileURL(entryPath).href);
 const handler = mod.default?.fetch ? mod.default : mod.default ?? mod;
+const executionContext = {
+  waitUntil(promise) {
+    Promise.resolve(promise).catch((error) => console.error(error));
+  },
+  passThroughOnException() {},
+};
 
 if (typeof handler.fetch !== "function") {
   console.error(`Autoscript web bundle has no fetch handler: ${entryPath}`);
@@ -53,7 +59,7 @@ createServer(async (req, res) => {
       duplex: "half",
     });
 
-    const response = await handler.fetch(request, process.env, {});
+    const response = await handler.fetch(request, process.env, executionContext);
     res.statusCode = response.status;
     response.headers.forEach((value, key) => res.setHeader(key, value));
     if (!response.body) return res.end();
