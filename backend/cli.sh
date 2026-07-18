@@ -119,7 +119,7 @@ show_status() {
   echo "${BLD}Repo${RST}        : ${REPO_URL:-<none>}"
   echo "${BLD}Install dir${RST} : ${INSTALL_ROOT}"
   echo
-  for u in autoscript-agent autoscript-web autoscript-ssh-ws autoscript-bot nginx fail2ban; do
+  for u in xray autoscript-agent autoscript-web autoscript-ssh-ws autoscript-bot nginx fail2ban; do
     printf "  %-22s %s\n" "$u" "$(systemctl is-active "$u" 2>/dev/null || echo inactive)"
   done
   echo
@@ -252,7 +252,7 @@ update_now() {
 restart_services() { restart_stack; ok "Services restarted."; }
 
 view_logs() {
-  echo "1) agent   2) ssh-ws   3) bot   4) nginx   5) ip-limit"
+  echo "1) agent   2) ssh-ws   3) bot   4) nginx   5) ip-limit   6) xray"
   ask "Which log? " x
   case "$x" in
     1) journalctl -u autoscript-agent   -n 200 --no-pager ;;
@@ -260,6 +260,7 @@ view_logs() {
     3) journalctl -u autoscript-bot     -n 200 --no-pager ;;
     4) journalctl -u nginx              -n 200 --no-pager ;;
     5) journalctl -u autoscript-ip-limit -n 200 --no-pager ;;
+    6) journalctl -u xray              -n 200 --no-pager ;;
     *) warn "Unknown choice" ;;
   esac
 }
