@@ -221,7 +221,7 @@ export const api = {
   },
   system: {
     async status() { return IS_PREVIEW ? mock.status() : req<SystemStatus>("/system/status"); },
-    async traffic(range: "1h" | "24h" | "7d" = "24h") { return IS_PREVIEW ? mock.traffic(range) : req<TrafficPoint[]>(`/system/traffic?range=${range}`); },
+    async traffic(range: "1h" | "24h" | "7d" | "30d" | "365d" = "24h") { return IS_PREVIEW ? mock.traffic(range === "30d" || range === "365d" ? "7d" : range) : req<TrafficPoint[]>(`/system/traffic?range=${range}`); },
     async version() { return IS_PREVIEW ? mock.version() : req<VersionInfo>("/system/version"); },
     async update() { return IS_PREVIEW ? mock.update() : req<{ ok: true; commit: string }>("/system/update", { method: "POST" }); },
     async restartService(name: string) { return IS_PREVIEW ? mock.restartService(name) : req(`/system/restart/${name}`, { method: "POST" }); },
