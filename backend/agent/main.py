@@ -522,6 +522,12 @@ async def _panel_gate(request: Request, call_next):
                             httponly=True, secure=True, samesite="lax",
                             max_age=60 * 60 * 24 * 30)
             return resp
+        public_path = (
+            path.startswith("/u/") or path.startswith("/assets/") or
+            path.startswith("/api/public/") or path in ("/favicon.ico", "/manifest.webmanifest")
+        )
+        if public_path:
+            return await _strip_api_and_call(request, call_next)
         # No prefix — allow only when the gate cookie is already present
         # (for /assets/*, /api/*, and SPA sub-routes rendered client-side).
         if not gate_ok:
@@ -885,8 +891,22 @@ def accounts_subscription(aid: str, user: str = Depends(require_auth)):
 
 @app.get("/accounts/{aid}/detail")
 def accounts_detail(aid: str, user: str = Depends(require_auth)):
+    return account_detail_payload(aid)
+
+
+@app.get("/public/accounts/{aid}/detail")
+def public_accounts_detail(aid: str):
+    return account_detail_payload(aid)
+
+
+def account_detail_payload(aid: str):
+    with db() as c:
+        r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
+    if not r:
+        raise HTTPException(404, "Not found")
+    a = row_to_account(r)
     a = accounts_get(aid, user)
-    cfg = accounts_config(aid, user)
+    cfg = accounts_config_public(a)
     try:
         exp = datetime.fromisoformat(a["expiresAt"].replace("Z", "+00:00"))
         days = max(0, (exp - datetime.now(timezone.utc)).days)
@@ -895,6 +915,24 @@ def accounts_detail(aid: str, user: str = Depends(require_auth)):
     return {"account": a, "configLink": cfg["link"], "configText": cfg["text"],
             "subscriptionUrl": f"https://{kv_get('panel.domain', PANEL_DOMAIN)}:{kv_get('panel.port', str(PANEL_PORT))}/u/{aid}",
             "daysRemaining": days, "hourly": [], "daily": [], "activeIps": []}
+
+
+def accounts_config_public(a: dict) -> dict:
+    host = kv_get(f"hosts.{a['protocol']}", "") or kv_get("panel.domain", PANEL_DOMAIN)
+    port = int(kv_get(f"ports.{a['protocol']}", "") or "443")
+    if a["protocol"] == "ssh":
+        login_user = ssh_login_username(a["username"])
+        return {"link": f"ssh://{login_user}:{a['password']}@{host}:22",
+                "text": f"Host: {host}\nPort: 22 (SSH), {port} (WebSocket path /)\n"
+                        f"User: {login_user}\nPanel user: {a['username']}\nPassword: {a['password']}"}
+    if a["protocol"] == "vmess":
+        cfg = {"v":"2","ps":a["username"],"add":host,"port":port,"id":a["uuid"],
+               "aid":0,"net":"ws","type":"none","host":host,"path":"/vmess","tls":"tls"}
+        return {"link": "vmess://" + base64.b64encode(json.dumps(cfg).encode()).decode(),
+                "text": json.dumps(cfg, indent=2)}
+    if a["protocol"] == "vless":
+        return {"link": f"vless://{a['uuid']}@{host}:{port}?type=ws&security=tls&path=%2Fvless#{a['username']}", "text": ""}
+    return {"link": f"trojan://{a['uuid']}@{host}:{port}?type=ws&security=tls&path=%2Ftrojan#{a['username']}", "text": ""}
 
 
 @app.post("/accounts/{aid}/telegram")
