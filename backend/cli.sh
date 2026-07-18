@@ -43,6 +43,22 @@ restart_stack() {
   systemctl restart autoscript-agent autoscript-ssh-ws autoscript-bot autoscript-web 2>/dev/null || true
   systemctl reload-or-restart nginx 2>/dev/null || true
 }
+repair_services() {
+  say "Installing required service packages"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -y >/dev/null 2>&1 || true
+  apt-get install -y --no-install-recommends openssh-server curl unzip ca-certificates nginx >/dev/null 2>&1 || true
+  systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true
+  chmod +x "$INSTALL_ROOT/backend/scripts/"*.sh 2>/dev/null || true
+  if [[ -x "$INSTALL_ROOT/backend/scripts/setup_xray.sh" ]]; then
+    bash "$INSTALL_ROOT/backend/scripts/setup_xray.sh" || warn "xray setup failed"
+  fi
+  [[ -x "$INSTALL_ROOT/backend/scripts/apply_settings.sh" ]] && bash "$INSTALL_ROOT/backend/scripts/apply_settings.sh" || true
+  systemctl daemon-reload
+  systemctl enable --now xray autoscript-ssh-ws nginx >/dev/null 2>&1 || true
+  systemctl restart xray autoscript-ssh-ws nginx 2>/dev/null || true
+  ok "VPN services repaired/restarted."
+}
 # Read from the controlling terminal so commands still work with piped/stdin use.
 if { exec 3</dev/tty; } 2>/dev/null; then :; else exec 3<&0; fi
 ask()    { local __v; IFS= read -r -u 3 -p "$1" __v || __v=""; printf -v "$2" '%s' "$__v"; }
@@ -203,6 +219,8 @@ update_now() {
   git reset --hard origin/main
   if [[ -f backend/scripts/migrate.sh ]]; then bash backend/scripts/migrate.sh || warn "migrate failed"; fi
   "$INSTALL_ROOT/backend/.venv/bin/pip" install -q -r "$INSTALL_ROOT/backend/agent/requirements.txt" || true
+  apt-get update -y >/dev/null 2>&1 || true
+  apt-get install -y --no-install-recommends openssh-server curl unzip ca-certificates nginx >/dev/null 2>&1 || true
   # Backfill WEB_INTERNAL_PORT for pre-existing installs
   if ! grep -q '^WEB_INTERNAL_PORT=' /etc/autoscript/agent.env 2>/dev/null; then
     local p=$(( ( RANDOM % 20000 ) + 20000 ))
@@ -220,9 +238,7 @@ update_now() {
   ensure_node22
   build_web_ui || warn "Web rebuild failed"
   chmod +x "$INSTALL_ROOT/backend/scripts/"*.sh 2>/dev/null || true
-  if [[ -x "$INSTALL_ROOT/backend/scripts/setup_xray.sh" ]]; then
-    bash "$INSTALL_ROOT/backend/scripts/setup_xray.sh" || warn "xray setup failed"
-  fi
+  repair_services
   restart_stack
   systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true
   systemctl enable --now xray autoscript-ssh-ws 2>/dev/null || true
@@ -285,8 +301,9 @@ ${BLD}${BLU}Autoscript Admin CLI${RST}
  9) Restart services
 10) View service logs
 11) Backup /etc/autoscript + xray config
-12) Set Telegram bot token / admin id
-13) Uninstall panel
+ 12) Set Telegram bot token / admin id
+ 13) Repair xray / SSH-WS / nginx
+ 14) Uninstall panel
  0) Exit
 EOF
   ask "Choose: " c
@@ -303,7 +320,8 @@ EOF
    10) view_logs ;;
    11) backup_now ;;
    12) reset_bot ;;
-   13) uninstall_all; exit 0 ;;
+    13) repair_services ;;
+    14) uninstall_all; exit 0 ;;
     0) exit 0 ;;
     *) warn "Unknown option" ;;
   esac
@@ -321,10 +339,11 @@ case "${1:-}" in
   set-repo)       change_repo_url ;;
   update)         update_now ;;
   restart)        restart_services ;;
+  repair-services) repair_services ;;
   logs)           view_logs ;;
   backup)         backup_now ;;
   set-bot)        reset_bot ;;
   uninstall)      uninstall_all ;;
   ""|menu)        menu ;;
-  *) echo "usage: autoscript [status|reset-user|reset-pass|set-domain|set-port|set-path|set-repo|update|restart|logs|backup|set-bot|uninstall]"; exit 1;;
+  *) echo "usage: autoscript [status|reset-user|reset-pass|set-domain|set-port|set-path|set-repo|update|restart|repair-services|logs|backup|set-bot|uninstall]"; exit 1;;
 esac
