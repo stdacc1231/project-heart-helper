@@ -637,7 +637,7 @@ def accounts_create(inp: AccountIn, user: str = Depends(require_auth)):
     except Exception:
         raise HTTPException(400, "Invalid expiry date")
     password = inp.password or (_uuid.uuid4().hex[:12] if proto == "ssh" else None)
-    aid = f"{inp.protocol}-{_uuid.uuid4().hex[:8]}"
+    aid = f"{proto}-{_uuid.uuid4().hex[:8]}"
     u = None if proto == "ssh" else str(_uuid.uuid4())
     try:
         with db() as c:
@@ -681,11 +681,14 @@ def accounts_update(aid: str, patch: AccountPatch, user: str = Depends(require_a
         if fields:
             c.execute(f"UPDATE accounts SET {', '.join(fields)} WHERE id = ?", (*args, aid))
         r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
-    if patch.speedUpKbps is not None or patch.speedDnKbps is not None:
-        apply_speed_limit(r["username"], r["speed_up_kbps"], r["speed_dn_kbps"])
+    a = row_to_account(r)
+    if a["protocol"] == "ssh" and (patch.password is not None or patch.expiresAt is not None):
+        provision_account(a)
+    elif patch.speedUpKbps is not None or patch.speedDnKbps is not None:
+        apply_speed_limit(a["username"], a["speedUpKbps"], a["speedDnKbps"])
     log("audit", "account.update", f"Updated {r['protocol']} account {r['username']}",
         actor=user, target=r["username"])
-    return row_to_account(r)
+    return a
 
 
 @app.delete("/accounts/{aid}")
