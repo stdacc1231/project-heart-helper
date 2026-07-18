@@ -1177,6 +1177,8 @@ def settings_save(inp: SettingsIn, user: str = Depends(require_auth)):
     if apply.exists():
         subprocess.Popen(["bash", str(apply)])
     log("audit", "settings.update", f"Settings updated: {list(changed)}", actor=user)
+    if any(k in changed for k in ("domain", "port")):
+        subprocess.Popen(["bash", "-lc", "nohup bash -c 'sleep 2; systemctl restart autoscript-agent' >/dev/null 2>&1 &"])
     return settings_get(user)
 
 
