@@ -1,92 +1,105 @@
-# Autoscript All-in-One Panel — Full Plan
+# Plan — Multi-port CDN listener, per-protocol host domains, user sub link, IP limits, remove Nodes
 
-## What you asked for (my read-back)
+## 1. Installer / Uninstaller rewrite (`backend/install.sh`, new `backend/uninstall.sh`)
 
-- **Telegram bot stays** and becomes a first-class part of the panel, managed from the UI (not a separate script).
-- **DNS / TLS**: wildcard supported via acme.sh DNS-01. Default provider **Cloudflare** (`dns_cf`), other acme.sh modules selectable at install (Gandi, DigitalOcean, etc.). Single-domain (HTTP-01) stays as the easy path.
-- **Bot ↔ Panel flow**:
-  1. User `/start` → bot shows plans, server info, their existing accounts.
-  2. User picks plan → bot sends payment details (QRIS / bank / crypto — configurable in panel).
-  3. User uploads payment proof → goes to admin approval queue in the web panel.
-  4. Admin approves in panel → account auto-created, config + QR + import links sent back through the bot.
-  5. Bot messages auto-delete after **N minutes** (default 10, configurable per message type: config, payment, receipt).
-- **Accounts**: link a **Telegram ID** to any account (SSH/VMess/VLESS/Trojan). All CLI options exposed in UI: expiry, IP limit, **speed limit (up/down kbps)**, **quota GB**, password/uuid rotate, renew, lock, delete.
-- **Billing**: two modes per plan — **Pay-as-you-go** (per-GB or per-day) and **Prepaid plan** (fixed price / duration / quota). Plans editable in panel.
-- **Panel UX**: modern, clean; dashboard with **hourly traffic graphs**, per-service graphs (SSH / Xray inbound), per-user usage sparkline, online users, uptime, live logs. Detailed audit + service logs with filters.
-- **SSH-WS path stays `/`** on HTTP/1.1 (already in the template — verified).
-- **Installer prompts**: main port (default 443), panel domain, TLS mode (1 single / 2 wildcard + DNS provider), admin username + password, DB path. Same cert reused for Xray. All values changeable later from panel Settings without reinstall.
-- **Self-update** from GitHub, one-click from panel.
+**Installer prompts (English, in order):**
+1. Panel main domain (e.g. `panel.example.com`) — this is the ONE domain TLS is issued for at install time and is used by every protocol until the user overrides per-protocol hosts in Settings.
+2. Panel HTTPS port (default `443`).
+3. TLS mode: `1) Single domain` (HTTP-01) or `2) Wildcard *.root` (DNS-01, acme.sh module + creds).
+4. Admin user + password.
+5. Telegram bot token + admin chat ID (optional).
+6. DB path.
+7. Repo URL for self-update.
 
-## Build order
+**Ports opened & bound (Cloudflare-supported, multi-port):**
+- HTTPS/TLS (CF proxied): `443, 2053, 2083, 2087, 2096, 8443` — all serve the same Nginx vhost (panel + SSH-WS on `/` + xray WS paths).
+- HTTP/plain-WS (CF proxied): `80, 8080, 8880, 2052, 2082, 2086, 2095` — same vhost, redirects to HTTPS except keeps `/` SSH-WS reachable in plain WS for injector clients.
+- Direct (non-CF) ports for protocols that can't go through CDN: Hysteria2/TUIC UDP, WireGuard UDP, Shadowsocks TCP/UDP — user picks port range, opened in ufw/iptables.
 
-### Phase A — Backend (Python agent + bot)
+**One TLS cert, shared:** issued for panel main domain (or wildcard). Symlinked into xray so every protocol served through Nginx uses the same fullchain. Additional per-protocol hostnames added later in Settings are automatically added to the cert via `acme.sh --issue -d ... -d newhost` and reloaded.
 
-1. `backend/agent/db.py` — SQLite schema:
-   `admins, accounts (with telegram_id, plan_id, speed_up, speed_dn, quota_gb, used_bytes), plans, payments, audit_logs, traffic_samples, settings (kv), bot_users`.
-2. `backend/agent/main.py` — expand routes:
-   - `/plans` CRUD, `/payments` (list, approve, reject),
-   - `/accounts` gains `telegram_id`, `planId`, `speedUp`, `speedDn`, `quotaGb`,
-   - `/system/traffic?range=1h|24h|7d` returns hourly buckets (reads `traffic_samples`),
-   - `/settings` GET/PATCH (bot token, payment info, domain, port, auto-delete minutes, DNS provider).
-3. `backend/agent/traffic_sampler.py` — background task, every minute reads `nft`/`vnstat`/`xray stats` and writes `traffic_samples`.
-4. `backend/agent/bot.py` — python-telegram-bot v21 async worker (systemd unit `autoscript-bot.service`).
-   - Commands: `/start`, `/me`, `/buy`, `/renew`, `/config`, `/help`.
-   - Auto-delete: schedule `deleteMessage` at `settings.auto_delete_minutes`.
-   - Uses agent internal HTTP (`127.0.0.1:8088`) with a shared secret so bot ↔ agent stay decoupled.
-5. `backend/scripts/*` — already present for provisioning; add `set_quota.sh` and hook `tc_limit.sh` on create/edit.
+**Uninstaller (`backend/uninstall.sh`):**
+- Stops + disables `autoscript-agent`, `autoscript-ssh-ws`, `autoscript-bot`, `xray`, `nginx` (nginx kept, only our vhost removed).
+- Removes `/opt/autoscript`, `/etc/autoscript`, systemd units, nginx vhost, cron jobs, tc rules, iptables rules we added.
+- Revokes acme.sh cert for panel domain.
+- Purges Cloudflare WARP remnants (already in installer, mirrored here).
+- Interactive confirm: `type 'REMOVE' to continue`.
 
-### Phase B — Installer
+## 2. Nginx template (`backend/nginx/panel.conf.tpl`)
 
-Rewrite `backend/install.sh` to prompt in this exact order (all English, defaults in brackets):
+- One `server` block generated per port in the multi-port list; all share the same TLS cert and `server_name` list (panel domain + every per-protocol host from Settings).
+- `location = /` handles WebSocket upgrade → SSH-WS bridge on `127.0.0.1:2095`; non-WS falls through to SPA. **Path stays `/`. HTTP/1.1 pinned.**
+- `location /vmess|/vless|/trojan` → xray inbounds, HTTP/1.1 pinned, CF real-IP header restored.
+- `location /sub/<token>` → agent, returns per-user subscription bundle + HTML detail page.
+- Plain-HTTP server blocks on non-TLS CF ports mirror the TLS block minus SSL, so `/` SSH-WS also works over CF plain-WS (used by injector apps on port 80).
 
-```
-Panel domain          : panel.example.com
-Panel port            : [443]
-TLS mode              : 1) single-domain  2) wildcard
-  If 2 → root domain, acme.sh DNS module [dns_cf], API credentials
-Admin username        : [admin]
-Admin password        : ****
-Telegram bot token    : (optional; can set later in panel)
-Telegram admin chat   : (optional; can set later in panel)
-DB path               : [/etc/autoscript/db.sqlite]
-GitHub repo (self-update): [<default>]
-```
+Template renders from `panel.domain` + `panel.extraHosts[]` + per-protocol host overrides read from DB by `apply_settings.sh`, so a settings change re-emits the full vhost.
 
-Then: purge Cloudflare WARP/Zero Trust, install nginx+xray+ssh-ws, issue cert, deploy 3 systemd units (`autoscript-agent`, `autoscript-ssh-ws`, `autoscript-bot`), enable timer for `traffic_sampler` and cert renew.
+## 3. Per-protocol host domains (Settings page)
 
-### Phase C — Web UI
+Add to `PanelSettings` (both api types and DB `settings` table):
+- `hosts.ssh`, `hosts.vmess`, `hosts.vless`, `hosts.trojan`, `hosts.shadowsocks`, `hosts.hysteria2`, `hosts.tuic`, `hosts.wireguard`, `hosts.reality`
+- `ports.ssh`, `ports.vmess`, ... (choose from the CF-supported list; validated)
 
-New/expanded pages in `src/routes/_authed.*`:
+Settings page gets a new "Protocol endpoints" card: one row per protocol with `host` + `port` inputs. Blank = fall back to panel main domain.
 
-- **Dashboard** (rewrite): hourly RX/TX area chart (recharts), per-protocol online counts, service health, uptime, version + Update button.
-- **Accounts** (edit): add `telegramId`, `plan`, `speedUp/Dn`, `quotaGb` in the create/edit drawer; per-row usage bar; QR + config download + import link.
-- **Account detail** (edit): 24h traffic sparkline, activity timeline, "send config to Telegram" button.
-- **Plans** (new `/plans`): CRUD plans (name, mode: PAYG per-GB / PAYG per-day / prepaid; price; duration; quota; speed caps; ip limit).
-- **Payments** (new `/payments`): approval queue — proof screenshot, plan, telegram user; Approve / Reject buttons.
-- **Bot** (new `/bot`): token, admin chat id, welcome text, plan-list template, auto-delete minutes, payment instructions (QRIS image upload, bank text, crypto address). "Restart bot" button.
-- **Logs** (edit): filters by type, level, actor; live tail toggle.
-- **Settings** (edit): panel domain + port change flow (re-runs nginx template + acme.sh switch), DNS provider, admin password, DB path (read-only), danger zone (reinstall xray, purge Cloudflare).
-- **Update** (already exists).
+Saving triggers `apply_settings.sh`:
+1. For each new host not covered by current cert → `acme.sh --issue -d panel -d host1 -d host2 ... --force`.
+2. Re-render nginx vhost with combined `server_name`.
+3. `nginx -t && systemctl reload nginx && systemctl restart xray`.
 
-### Phase D — API client + mocks
+Account config export uses each protocol's host+port when building the client link, so users always get the correct endpoint.
 
-Extend `src/lib/api.ts` and `src/lib/mock.ts` with `plans`, `payments`, `bot`, `settings`, `traffic` endpoints so every new page is clickable in Lovable preview.
+## 4. Per-user subscription + live detail link
 
-## Technical notes
+Agent adds:
+- `GET /sub/:token` → returns Base64 subscription bundle (v2rayNG/Clash/sing-box negotiated by `?app=` query).
+- `GET /u/:token` → public HTML page (server-rendered by agent, no auth needed, token is unguessable) showing:
+  - Account: username, protocol, expiry, quota, plan
+  - **Live traffic**: hourly + daily chart of upload/download for the last 30 days (from xray stats API + agent poll every 60s)
+  - Data used vs quota, days remaining
+  - Current active IPs, device count, last seen
+  - Copyable config strings + QR
+  - Subscription URL for one-click import
 
-- **Traffic graph source**: `xray stats` API + `iptables -w -nvxL` counters per user (already how the CLI does it). Sampler writes 1-minute rows, dashboard aggregates to hourly.
-- **Speed limit**: `tc qdisc` HTB per-user classid, mapped by account id. Wrapper `tc_limit.sh` called on create/edit/delete.
-- **Bot ↔ agent auth**: `BOT_INTERNAL_TOKEN` shared secret in `/etc/autoscript/agent.env`, sent as `X-Internal-Token` header. Bot never talks to the DB directly — only through the agent, so all business rules (quota checks, expiry, audit logs) stay in one place.
-- **Auto-delete**: scheduled with `asyncio.create_task(sleep + delete)` inside the bot; also persisted so a bot restart re-schedules pending deletions.
-- **Payment approval**: bot uploads the proof file to `/etc/autoscript/uploads/`; the panel serves it via signed URL from the agent.
-- **Domain/port change**: `/settings/apply` rewrites nginx template, reissues cert if domain changed, restarts nginx + xray + agent — all from the panel, no SSH needed.
+Token stored on the account row, rotatable from the panel.
 
-## Out of scope (still)
+## 5. IP limit per user (SSH + xray)
 
-- Multi-VPS orchestration.
-- Reseller sub-accounts.
-- Mobile app.
+- New account field: `ipLimit` (int, 0 = unlimited). Editable in accounts drawer, default from plan.
+- **SSH**: enforced by a small watcher in the agent — counts distinct source IPs per SSH user via `ss -tnp | grep sshd`, if over limit → kills the newest sessions and logs. Runs every 15s.
+- **xray**: enable stats per user (email tag), agent polls `xray api statsquery`, groups active sessions by client-IP (from access log tail), enforces same way — issues `xray api rm inbound user` for the offending client until under limit, re-adds after cooldown.
+- Enforcement events → alerts feed + optional telegram.
 
-## One thing I still need from you
+## 6. Remove multi-node system
 
-**GitHub repo URL** for the installer's `curl | bash` one-liner and the self-update source. Say the word and I start Phase A.
+- Delete `src/routes/_authed.nodes.tsx`.
+- Remove `Nodes` nav item from `src/components/app-shell.tsx`.
+- Remove `nodes` types, mock data, and `api.nodes.*` from `src/lib/api.ts` + `src/lib/mock.ts`.
+- No agent-side node code exists yet, so nothing to remove there.
+
+## 7. Files touched
+
+**Backend:**
+- `backend/install.sh` — rewrite prompts + multi-port + firewall
+- `backend/uninstall.sh` — NEW
+- `backend/nginx/panel.conf.tpl` — multi-port + per-proto server_name
+- `backend/scripts/apply_settings.sh` — re-render + re-issue cert
+- `backend/scripts/ip_limit_watcher.sh` — NEW (systemd timer)
+- `backend/systemd/autoscript-ip-limit.{service,timer}` — NEW
+- `backend/agent/main.py` — `/sub/:token`, `/u/:token`, per-user traffic endpoint, ipLimit CRUD, settings schema
+- `backend/agent/traffic_poller.py` — NEW (xray stats → sqlite hourly buckets)
+
+**Frontend:**
+- `src/lib/api.ts` + `src/lib/mock.ts` — extend PanelSettings, add per-user traffic + sub token, remove nodes, add ipLimit
+- `src/routes/_authed.settings.tsx` — new "Protocol endpoints" card
+- `src/routes/_authed.accounts.tsx` — ipLimit column + editor, "Copy user link" button
+- `src/routes/_authed.accounts.$id.tsx` — show sub link + rotate token + IP limit
+- `src/components/app-shell.tsx` — remove Nodes nav
+- Delete `src/routes/_authed.nodes.tsx`
+
+## 8. Notes
+
+- No 2FA, no xterm terminal, no PWA/push, no audit-diff, no reseller (kept out per earlier decisions).
+- Cloudflare Free tier proxies WebSocket only on 80/443/8080/8880/2052/2082/2086/2095 (plain) and 443/2053/2083/2087/2096/8443 (TLS) — the list above matches that exactly.
+- Everything remains driven by one panel main domain until the user opts into per-protocol hosts.
