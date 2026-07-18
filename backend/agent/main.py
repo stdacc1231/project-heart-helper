@@ -709,3 +709,27 @@ def logs_list(type: Optional[str] = None, limit: int = 200, _: str = Depends(req
     return [{"id": str(r["id"]), "ts": r["ts"], "type": r["type"], "level": r["level"],
              "actor": r["actor"], "action": r["action"], "target": r["target"],
              "message": r["message"]} for r in rows]
+
+
+# ---- SPA (must be registered last so /api/* and other routes take priority)
+try:
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    _DIST = Path(INSTALL_ROOT) / "dist"
+    if _DIST.is_dir():
+        _INDEX = _DIST / "index.html"
+
+        class _SPA(StaticFiles):
+            async def get_response(self, path, scope):
+                try:
+                    return await super().get_response(path, scope)
+                except Exception:
+                    if _INDEX.exists():
+                        return FileResponse(str(_INDEX))
+                    raise
+
+        app.mount("/", _SPA(directory=str(_DIST), html=True), name="spa")
+except Exception:
+    pass
+
