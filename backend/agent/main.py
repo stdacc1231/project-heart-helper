@@ -118,6 +118,38 @@ CREATE INDEX IF NOT EXISTS idx_traffic_ts ON traffic_samples(ts);
 """
 
 
+ACCOUNT_COLUMNS = {
+    "protocol":      "TEXT NOT NULL DEFAULT 'ssh'",
+    "username":      "TEXT NOT NULL DEFAULT ''",
+    "password":      "TEXT",
+    "uuid":          "TEXT",
+    "created_at":    "TEXT NOT NULL DEFAULT ''",
+    "expires_at":    "TEXT NOT NULL DEFAULT ''",
+    "ip_limit":      "INTEGER NOT NULL DEFAULT 2",
+    "speed_up_kbps": "INTEGER NOT NULL DEFAULT 0",
+    "speed_dn_kbps": "INTEGER NOT NULL DEFAULT 0",
+    "quota_gb":      "INTEGER NOT NULL DEFAULT 0",
+    "used_bytes":    "INTEGER NOT NULL DEFAULT 0",
+    "status":        "TEXT NOT NULL DEFAULT 'active'",
+    "telegram_id":   "TEXT",
+    "plan_id":       "TEXT",
+    "note":          "TEXT",
+}
+
+
+def _migrate(con: sqlite3.Connection) -> None:
+    """Backfill columns added after the first install so old DBs keep working."""
+    have = {row["name"] for row in con.execute("PRAGMA table_info(accounts)").fetchall()}
+    if not have:
+        return
+    for col, decl in ACCOUNT_COLUMNS.items():
+        if col not in have:
+            try:
+                con.execute(f"ALTER TABLE accounts ADD COLUMN {col} {decl}")
+            except sqlite3.OperationalError as exc:
+                print(f"schema-migrate-skip accounts.{col}: {exc}", flush=True)
+
+
 @contextmanager
 def db():
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
@@ -125,10 +157,12 @@ def db():
     con.row_factory = sqlite3.Row
     try:
         con.executescript(SCHEMA)
+        _migrate(con)
         yield con
         con.commit()
     finally:
         con.close()
+
 
 
 def kv_get(key: str, default: str = "") -> str:
@@ -294,17 +328,29 @@ def update_env_value(key: str, value: str) -> None:
     env_path.write_text("\n".join(out) + "\n")
 
 
+def _col(r: sqlite3.Row, key: str, default=None):
+    try:
+        return r[key]
+    except (IndexError, KeyError):
+        return default
+
+
 def row_to_account(r: sqlite3.Row) -> dict:
     return {
-        "id": r["id"], "protocol": r["protocol"], "username": r["username"],
-        "password": r["password"], "uuid": r["uuid"],
-        "createdAt": r["created_at"], "expiresAt": r["expires_at"],
-        "ipLimit": r["ip_limit"],
-        "speedUpKbps": r["speed_up_kbps"], "speedDnKbps": r["speed_dn_kbps"],
-        "quotaGb": r["quota_gb"], "usedBytes": r["used_bytes"], "online": 0,
-        "status": r["status"], "telegramId": r["telegram_id"], "planId": r["plan_id"],
-        "note": r["note"],
+        "id": _col(r, "id"), "protocol": _col(r, "protocol", "ssh"),
+        "username": _col(r, "username", ""),
+        "password": _col(r, "password"), "uuid": _col(r, "uuid"),
+        "createdAt": _col(r, "created_at", ""), "expiresAt": _col(r, "expires_at", ""),
+        "ipLimit": _col(r, "ip_limit", 0),
+        "speedUpKbps": _col(r, "speed_up_kbps", 0),
+        "speedDnKbps": _col(r, "speed_dn_kbps", 0),
+        "quotaGb": _col(r, "quota_gb", 0),
+        "usedBytes": _col(r, "used_bytes", 0), "online": 0,
+        "status": _col(r, "status", "active"),
+        "telegramId": _col(r, "telegram_id"), "planId": _col(r, "plan_id"),
+        "note": _col(r, "note"),
     }
+
 
 
 def row_to_plan(r: sqlite3.Row) -> dict:
