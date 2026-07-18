@@ -302,6 +302,20 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
                    allow_headers=["*"], allow_credentials=True)
 
 
+# The frontend calls /api/*. Strip the prefix so route decorators stay clean.
+@app.middleware("http")
+async def _strip_api_prefix(request: Request, call_next):
+    path = request.scope.get("path", "")
+    if path.startswith("/api/"):
+        request.scope["path"] = path[4:]
+        raw = request.scope.get("raw_path")
+        if isinstance(raw, (bytes, bytearray)) and raw.startswith(b"/api/"):
+            request.scope["raw_path"] = raw[4:]
+    elif path == "/api":
+        request.scope["path"] = "/"
+    return await call_next(request)
+
+
 # ---- Auth ------------------------------------------------------------------
 @app.post("/auth/login")
 def auth_login(inp: LoginIn, response: Response):
@@ -695,3 +709,27 @@ def logs_list(type: Optional[str] = None, limit: int = 200, _: str = Depends(req
     return [{"id": str(r["id"]), "ts": r["ts"], "type": r["type"], "level": r["level"],
              "actor": r["actor"], "action": r["action"], "target": r["target"],
              "message": r["message"]} for r in rows]
+
+
+# ---- SPA (must be registered last so /api/* and other routes take priority)
+try:
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    _DIST = Path(INSTALL_ROOT) / "dist"
+    if _DIST.is_dir():
+        _INDEX = _DIST / "index.html"
+
+        class _SPA(StaticFiles):
+            async def get_response(self, path, scope):
+                try:
+                    return await super().get_response(path, scope)
+                except Exception:
+                    if _INDEX.exists():
+                        return FileResponse(str(_INDEX))
+                    raise
+
+        app.mount("/", _SPA(directory=str(_DIST), html=True), name="spa")
+except Exception:
+    pass
+
