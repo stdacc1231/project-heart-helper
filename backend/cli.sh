@@ -41,19 +41,31 @@ PY
 }
 restart_stack() {
   systemctl restart autoscript-agent autoscript-ssh-ws autoscript-bot 2>/dev/null || true
-  systemctl reload nginx 2>/dev/null || systemctl restart nginx || true
+  systemctl reload-or-restart nginx 2>/dev/null || true
+}
+rand_slug() { tr -dc 'a-z0-9' </dev/urandom | head -c "${1:-14}"; }
+rand_pass() { tr -dc 'A-Za-z0-9' </dev/urandom | head -c 18; }
+CF_PORTS_ALL="443 2053 2083 2087 2096 8443 80 8080 8880 2052 2082 2086 2095"
+pick_port() {
+  local p
+  while :; do
+    p=$(( (RANDOM % 40000) + 20000 ))
+    for cf in $CF_PORTS_ALL; do [[ $p -eq $cf ]] && continue 2; done
+    ss -H -tln 2>/dev/null | awk '{print $4}' | grep -q ":${p}$" && continue
+    echo "$p"; return
+  done
 }
 
 # ---------- actions ----------
 show_status() {
   echo
-  echo "${BLD}Panel${RST}       : https://${PANEL_DOMAIN}:${PANEL_PORT}"
+  echo "${BLD}Panel${RST}       : https://${PANEL_DOMAIN}:${PANEL_PORT}/${PANEL_PATH:-}/"
   echo "${BLD}Admin user${RST}  : ${ADMIN_USER}"
   echo "${BLD}DB${RST}          : ${DB_PATH}"
   echo "${BLD}Repo${RST}        : ${REPO_URL:-<none>}"
   echo "${BLD}Install dir${RST} : ${INSTALL_ROOT}"
   echo
-  for u in autoscript-agent autoscript-ssh-ws autoscript-bot nginx; do
+  for u in autoscript-agent autoscript-ssh-ws autoscript-bot nginx fail2ban; do
     printf "  %-22s %s\n" "$u" "$(systemctl is-active "$u" 2>/dev/null || echo inactive)"
   done
   echo
@@ -70,34 +82,72 @@ reset_admin_user() {
 }
 
 reset_admin_password() {
-  read -rsp "New admin password: " p1; echo
-  read -rsp "Repeat password : " p2; echo
-  [[ "$p1" == "$p2" && ${#p1} -ge 6 ]] || die "Passwords do not match or too short (min 6)."
+  read -rsp "New admin password (blank to auto-generate): " p1; echo
+  local auto=0
+  if [[ -z "$p1" ]]; then
+    p1=$(rand_pass); auto=1
+  else
+    read -rsp "Repeat password : " p2; echo
+    [[ "$p1" == "$p2" && ${#p1} -ge 6 ]] || die "Passwords do not match or too short (min 6)."
+  fi
   local hash
-  hash=$("$VENV_PY" -c "from passlib.hash import bcrypt; import sys; print(bcrypt.hash(sys.argv[1]))" "$p1")
+  hash=$("$VENV_PY" -c "from passlib.hash import argon2; import sys; print(argon2.hash(sys.argv[1]))" "$p1")
   set_env ADMIN_HASH "'$hash'"
   set_setting "admin.hash" "$hash"
   restart_stack
   ok "Admin password updated."
+  [[ $auto -eq 1 ]] && echo "  New password: ${BLD}${p1}${RST}"
+}
+
+change_panel_port() {
+  local old="$PANEL_PORT" new
+  echo "Current panel port: ${old}"
+  read -rp "New port (blank = auto-random, must avoid CF ports): " new
+  if [[ -z "$new" ]]; then
+    new=$(pick_port)
+  else
+    [[ "$new" =~ ^[0-9]+$ ]] || die "Port must be numeric."
+    for cf in $CF_PORTS_ALL; do [[ "$new" -eq "$cf" ]] && die "Port $new is a Cloudflare/Nginx VPN port."; done
+  fi
+  set_env PANEL_PORT "$new"
+  set_setting "panel.port" "$new"
+  ufw allow "${new}/tcp" comment 'autoscript-panel' >/dev/null 2>&1 || true
+  ufw delete allow "${old}/tcp" >/dev/null 2>&1 || true
+  systemctl restart autoscript-agent
+  ok "Panel now listens on port ${new}. URL: https://${PANEL_DOMAIN}:${new}/${PANEL_PATH:-}/"
+}
+
+change_panel_path() {
+  echo "Current secret path: /${PANEL_PATH:-<none>}/"
+  read -rp "New path slug (blank = regenerate random, '-' to disable): " p
+  if [[ -z "$p" ]]; then p=$(rand_slug 14)
+  elif [[ "$p" == "-" ]]; then p=""
+  else
+    [[ "$p" =~ ^[a-zA-Z0-9_-]{4,40}$ ]] || die "Path must be 4-40 chars: letters, digits, _ or -"
+  fi
+  set_env PANEL_PATH "$p"
+  set_setting "panel.path" "$p"
+  systemctl restart autoscript-agent
+  if [[ -n "$p" ]]; then
+    ok "Panel URL: https://${PANEL_DOMAIN}:${PANEL_PORT}/${p}/"
+  else
+    ok "Secret path disabled. Panel URL: https://${PANEL_DOMAIN}:${PANEL_PORT}/"
+  fi
 }
 
 change_panel_domain() {
   read -rp "New panel domain (current: $PANEL_DOMAIN): " d
   [[ -n "$d" ]] || die "Domain required."
-  read -rp "HTTPS port [${PANEL_PORT}]: " port
-  port=${port:-$PANEL_PORT}
   echo "TLS mode:  1) single-domain  2) wildcard"
   read -rp "Choose [1-2, current mode kept if blank]: " mode
   set_env PANEL_DOMAIN "$d"
-  set_env PANEL_PORT   "$port"
   set_setting "panel.domain" "$d"
-  set_setting "panel.port"   "$port"
   [[ "$mode" == "1" ]] && set_setting "panel.tlsMode" "single"
   [[ "$mode" == "2" ]] && set_setting "panel.tlsMode" "wildcard"
   say "Re-issuing TLS + reloading nginx…"
   bash "$INSTALL_ROOT/backend/scripts/apply_settings.sh"
   restart_stack
-  ok "Panel domain is now https://${d}:${port}"
+  ok "Panel domain is now https://${d}:${PANEL_PORT}/${PANEL_PATH:-}/"
 }
 
 change_repo_url() {
@@ -115,6 +165,12 @@ update_now() {
   git reset --hard origin/main
   if [[ -f backend/scripts/migrate.sh ]]; then bash backend/scripts/migrate.sh || warn "migrate failed"; fi
   "$INSTALL_ROOT/backend/.venv/bin/pip" install -q -r "$INSTALL_ROOT/backend/agent/requirements.txt" || true
+  say "Rebuilding web UI"
+  if [[ -f bun.lockb ]] && command -v bun >/dev/null; then
+    bun install --production=false && bun run build || warn "SPA rebuild failed"
+  elif command -v npm >/dev/null; then
+    (npm ci --no-audit --no-fund || npm install --no-audit --no-fund) && npm run build || warn "SPA rebuild failed"
+  fi
   restart_stack
   ok "Updated to latest main."
 }
@@ -166,15 +222,17 @@ ${BLD}${BLU}Autoscript Admin CLI${RST}
 ==============================
  1) Show status
  2) Reset admin username
- 3) Reset admin password
- 4) Change panel domain / port / TLS mode
- 5) Change GitHub repo URL
- 6) Update from GitHub (git pull + restart)
- 7) Restart services
- 8) View service logs
- 9) Backup /etc/autoscript + xray config
-10) Set Telegram bot token / admin id
-11) Uninstall panel
+ 3) Reset admin password (blank = auto-generate)
+ 4) Change panel domain / TLS mode
+ 5) Change panel port  (random, avoids Cloudflare/Nginx VPN ports)
+ 6) Change panel secret path
+ 7) Change GitHub repo URL
+ 8) Update from GitHub (git pull + rebuild + restart)
+ 9) Restart services
+10) View service logs
+11) Backup /etc/autoscript + xray config
+12) Set Telegram bot token / admin id
+13) Uninstall panel
  0) Exit
 EOF
   read -rp "Choose: " c
@@ -183,13 +241,15 @@ EOF
     2) reset_admin_user ;;
     3) reset_admin_password ;;
     4) change_panel_domain ;;
-    5) change_repo_url ;;
-    6) update_now ;;
-    7) restart_services ;;
-    8) view_logs ;;
-    9) backup_now ;;
-   10) reset_bot ;;
-   11) uninstall_all; exit 0 ;;
+    5) change_panel_port ;;
+    6) change_panel_path ;;
+    7) change_repo_url ;;
+    8) update_now ;;
+    9) restart_services ;;
+   10) view_logs ;;
+   11) backup_now ;;
+   12) reset_bot ;;
+   13) uninstall_all; exit 0 ;;
     0) exit 0 ;;
     *) warn "Unknown option" ;;
   esac
@@ -202,6 +262,8 @@ case "${1:-}" in
   reset-user)     reset_admin_user ;;
   reset-pass)     reset_admin_password ;;
   set-domain)     change_panel_domain ;;
+  set-port)       change_panel_port ;;
+  set-path)       change_panel_path ;;
   set-repo)       change_repo_url ;;
   update)         update_now ;;
   restart)        restart_services ;;
@@ -210,5 +272,5 @@ case "${1:-}" in
   set-bot)        reset_bot ;;
   uninstall)      uninstall_all ;;
   ""|menu)        menu ;;
-  *) echo "usage: autoscript [status|reset-user|reset-pass|set-domain|set-repo|update|restart|logs|backup|set-bot|uninstall]"; exit 1;;
+  *) echo "usage: autoscript [status|reset-user|reset-pass|set-domain|set-port|set-path|set-repo|update|restart|logs|backup|set-bot|uninstall]"; exit 1;;
 esac

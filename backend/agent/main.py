@@ -42,6 +42,8 @@ INSTALL_ROOT   = os.environ.get("INSTALL_ROOT", "/opt/autoscript")
 INTERNAL_TOKEN = os.environ.get("BOT_INTERNAL_TOKEN", "")
 UPLOAD_DIR     = Path(os.environ.get("UPLOAD_DIR", "/etc/autoscript/uploads"))
 SCRIPTS        = Path(INSTALL_ROOT) / "backend" / "scripts"
+PANEL_PATH     = (os.environ.get("PANEL_PATH", "") or "").strip("/")
+GATE_SECRET    = os.environ.get("GATE_SECRET", "gate-dev-change-me")
 
 JWT_ALG = "HS256"
 JWT_TTL = 60 * 60 * 24
@@ -302,23 +304,68 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
                    allow_headers=["*"], allow_credentials=True)
 
 
-# The frontend calls /api/*. Strip the prefix so route decorators stay clean.
+# Secret-path gate + /api prefix stripping.
+#
+# Panel URL = https://<domain>:<port>/<PANEL_PATH>/
+# The first request to /<PANEL_PATH>/... sets an HttpOnly cookie so subsequent
+# asset/API requests (which come back with plain absolute paths like
+# /assets/foo.js and /api/auth/login) succeed. Everything else is 404'd and
+# the reject is logged in a fail2ban-friendly format.
+import hmac as _hmac
+import hashlib as _hashlib
+
+def _gate_token() -> str:
+    return _hmac.new(GATE_SECRET.encode(), PANEL_PATH.encode(), _hashlib.sha256).hexdigest()[:32]
+
 @app.middleware("http")
-async def _strip_api_prefix(request: Request, call_next):
-    path = request.scope.get("path", "")
-    if path.startswith("/api/"):
-        request.scope["path"] = path[4:]
-        raw = request.scope.get("raw_path")
+async def _panel_gate(request: Request, call_next):
+    from starlette.responses import Response as _R
+    scope = request.scope
+    path  = scope.get("path", "") or "/"
+    client_ip = (request.client.host if request.client else "-")
+
+    # If a secret path is configured, enforce it.
+    if PANEL_PATH:
+        pfx = f"/{PANEL_PATH}"
+        gate_ok = request.cookies.get("panel_gate") == _gate_token()
+        under_pfx = path == pfx or path.startswith(pfx + "/")
+        # Requests that use the secret prefix: strip it and mint the cookie.
+        if under_pfx:
+            new_path = path[len(pfx):] or "/"
+            scope["path"] = new_path
+            raw = scope.get("raw_path")
+            if isinstance(raw, (bytes, bytearray)) and raw.startswith(pfx.encode()):
+                scope["raw_path"] = raw[len(pfx):] or b"/"
+            resp = await _strip_api_and_call(request, call_next)
+            resp.set_cookie("panel_gate", _gate_token(),
+                            httponly=True, secure=True, samesite="lax",
+                            max_age=60 * 60 * 24 * 30)
+            return resp
+        # No prefix — allow only when the gate cookie is already present
+        # (for /assets/*, /api/*, and SPA sub-routes rendered client-side).
+        if not gate_ok:
+            print(f"panel-gate-reject {client_ip} path={path}", flush=True)
+            return _R("Not Found", status_code=404)
+
+    return await _strip_api_and_call(request, call_next)
+
+
+async def _strip_api_and_call(request: Request, call_next):
+    scope = request.scope
+    p = scope.get("path", "")
+    if p.startswith("/api/"):
+        scope["path"] = p[4:]
+        raw = scope.get("raw_path")
         if isinstance(raw, (bytes, bytearray)) and raw.startswith(b"/api/"):
-            request.scope["raw_path"] = raw[4:]
-    elif path == "/api":
-        request.scope["path"] = "/"
+            scope["raw_path"] = raw[4:]
+    elif p == "/api":
+        scope["path"] = "/"
     return await call_next(request)
 
 
 # ---- Auth ------------------------------------------------------------------
 @app.post("/auth/login")
-def auth_login(inp: LoginIn, response: Response):
+def auth_login(inp: LoginIn, request: Request, response: Response):
     ok = False
     if inp.username == ADMIN_USER and ADMIN_HASH:
         try:
@@ -329,8 +376,10 @@ def auth_login(inp: LoginIn, response: Response):
                 ok = _c.crypt(inp.password, ADMIN_HASH) == ADMIN_HASH
         except Exception:
             ok = False
+    client_ip = (request.client.host if request.client else "-")
     if not ok:
-        log("auth", "auth.login.fail", f"Failed login for {inp.username}", level="warn", actor=inp.username)
+        print(f"Failed login for {inp.username} from {client_ip}", flush=True)
+        log("auth", "auth.login.fail", f"Failed login for {inp.username} from {client_ip}", level="warn", actor=inp.username)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
     token = make_token(inp.username)
     response.set_cookie("token", token, httponly=True, secure=True, samesite="lax", max_age=JWT_TTL)
