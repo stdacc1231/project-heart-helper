@@ -1,98 +1,92 @@
-# Autoscript Web UI — Migration Plan
+# Autoscript All-in-One Panel — Full Plan
 
-## Goal
-Retire the interactive bash menus. Keep every install/runtime script in Python/bash on the VPS. Drive everything from a clean, modern web panel served from the same VPS, protected by a domain + TLS you generate at install time.
+## What you asked for (my read-back)
 
-## Architecture
+- **Telegram bot stays** and becomes a first-class part of the panel, managed from the UI (not a separate script).
+- **DNS / TLS**: wildcard supported via acme.sh DNS-01. Default provider **Cloudflare** (`dns_cf`), other acme.sh modules selectable at install (Gandi, DigitalOcean, etc.). Single-domain (HTTP-01) stays as the easy path.
+- **Bot ↔ Panel flow**:
+  1. User `/start` → bot shows plans, server info, their existing accounts.
+  2. User picks plan → bot sends payment details (QRIS / bank / crypto — configurable in panel).
+  3. User uploads payment proof → goes to admin approval queue in the web panel.
+  4. Admin approves in panel → account auto-created, config + QR + import links sent back through the bot.
+  5. Bot messages auto-delete after **N minutes** (default 10, configurable per message type: config, payment, receipt).
+- **Accounts**: link a **Telegram ID** to any account (SSH/VMess/VLESS/Trojan). All CLI options exposed in UI: expiry, IP limit, **speed limit (up/down kbps)**, **quota GB**, password/uuid rotate, renew, lock, delete.
+- **Billing**: two modes per plan — **Pay-as-you-go** (per-GB or per-day) and **Prepaid plan** (fixed price / duration / quota). Plans editable in panel.
+- **Panel UX**: modern, clean; dashboard with **hourly traffic graphs**, per-service graphs (SSH / Xray inbound), per-user usage sparkline, online users, uptime, live logs. Detailed audit + service logs with filters.
+- **SSH-WS path stays `/`** on HTTP/1.1 (already in the template — verified).
+- **Installer prompts**: main port (default 443), panel domain, TLS mode (1 single / 2 wildcard + DNS provider), admin username + password, DB path. Same cert reused for Xray. All values changeable later from panel Settings without reinstall.
+- **Self-update** from GitHub, one-click from panel.
 
-```text
-Browser (Web UI, TanStack Start)
-        │  HTTPS (your domain)
-        ▼
-Nginx  ──►  /            → Web UI static + SSR
-           /api/*        → Python Agent (FastAPI, localhost:8088)
-           /ws           → SSH-over-WebSocket (HTTP/1.1 Upgrade, fixed)
-           /vmess-ws, /vless-ws, /trojan-ws → xray/backend
-        │
-        ▼
-Python Agent (FastAPI + Uvicorn, systemd)
-  - Wraps existing bash scripts (no rewrite of protocol logic)
-  - SQLite DB at configurable path (default /etc/autoscript/db.sqlite)
-  - Auth: admin login (argon2), JWT session
-  - Self-update: `git pull` from your GitHub repo + `systemctl restart`
+## Build order
+
+### Phase A — Backend (Python agent + bot)
+
+1. `backend/agent/db.py` — SQLite schema:
+   `admins, accounts (with telegram_id, plan_id, speed_up, speed_dn, quota_gb, used_bytes), plans, payments, audit_logs, traffic_samples, settings (kv), bot_users`.
+2. `backend/agent/main.py` — expand routes:
+   - `/plans` CRUD, `/payments` (list, approve, reject),
+   - `/accounts` gains `telegram_id`, `planId`, `speedUp`, `speedDn`, `quotaGb`,
+   - `/system/traffic?range=1h|24h|7d` returns hourly buckets (reads `traffic_samples`),
+   - `/settings` GET/PATCH (bot token, payment info, domain, port, auto-delete minutes, DNS provider).
+3. `backend/agent/traffic_sampler.py` — background task, every minute reads `nft`/`vnstat`/`xray stats` and writes `traffic_samples`.
+4. `backend/agent/bot.py` — python-telegram-bot v21 async worker (systemd unit `autoscript-bot.service`).
+   - Commands: `/start`, `/me`, `/buy`, `/renew`, `/config`, `/help`.
+   - Auto-delete: schedule `deleteMessage` at `settings.auto_delete_minutes`.
+   - Uses agent internal HTTP (`127.0.0.1:8088`) with a shared secret so bot ↔ agent stay decoupled.
+5. `backend/scripts/*` — already present for provisioning; add `set_quota.sh` and hook `tc_limit.sh` on create/edit.
+
+### Phase B — Installer
+
+Rewrite `backend/install.sh` to prompt in this exact order (all English, defaults in brackets):
+
+```
+Panel domain          : panel.example.com
+Panel port            : [443]
+TLS mode              : 1) single-domain  2) wildcard
+  If 2 → root domain, acme.sh DNS module [dns_cf], API credentials
+Admin username        : [admin]
+Admin password        : ****
+Telegram bot token    : (optional; can set later in panel)
+Telegram admin chat   : (optional; can set later in panel)
+DB path               : [/etc/autoscript/db.sqlite]
+GitHub repo (self-update): [<default>]
 ```
 
-Backend logic stays as-is. The agent is a thin API layer that shells out to the existing scripts and reads the same account files, then normalizes results into JSON.
+Then: purge Cloudflare WARP/Zero Trust, install nginx+xray+ssh-ws, issue cert, deploy 3 systemd units (`autoscript-agent`, `autoscript-ssh-ws`, `autoscript-bot`), enable timer for `traffic_sampler` and cert renew.
 
-## Scope of Phase 1 (this milestone)
+### Phase C — Web UI
 
-### 1. Installer rewrite (bash)
-- Full **English** copy (translate all Indonesian strings).
-- On install prompt for:
-  1. **Panel domain** (e.g. `panel.example.com`)
-  2. **Certificate mode**: `1) Single domain` or `2) Wildcard` (DNS-01 via acme.sh)
-  3. Admin username + password for the web panel
-  4. DB path (default `/etc/autoscript/db.sqlite`)
-- Issue TLS once with acme.sh; **reuse the same cert** for Nginx panel vhost AND for xray (VMess/VLESS/Trojan TLS) — single fullchain, single key path, symlinked.
-- Install + enable: `autoscript-agent.service`, Nginx vhost, xray, ssh-ws, cron for cert renew.
-- **Remove entirely**: Cloudflare WARP install, Cloudflare Zero Trust tunnel setup, all related menu items, configs, and systemd units. Purge on upgrade.
+New/expanded pages in `src/routes/_authed.*`:
 
-### 2. SSH WebSocket path fix
-- Current setup exposes a randomized path and mishandles `/`. Replace with a fixed HTTP/1.1 WebSocket proxy on **`/`** at the SSH-WS vhost/port, upgrade headers correct (`Upgrade: websocket`, `Connection: Upgrade`, HTTP/1.1 pinned in Nginx `proxy_http_version 1.1`).
-- Drop all `/random` path generation from configs and payload generators.
+- **Dashboard** (rewrite): hourly RX/TX area chart (recharts), per-protocol online counts, service health, uptime, version + Update button.
+- **Accounts** (edit): add `telegramId`, `plan`, `speedUp/Dn`, `quotaGb` in the create/edit drawer; per-row usage bar; QR + config download + import link.
+- **Account detail** (edit): 24h traffic sparkline, activity timeline, "send config to Telegram" button.
+- **Plans** (new `/plans`): CRUD plans (name, mode: PAYG per-GB / PAYG per-day / prepaid; price; duration; quota; speed caps; ip limit).
+- **Payments** (new `/payments`): approval queue — proof screenshot, plan, telegram user; Approve / Reject buttons.
+- **Bot** (new `/bot`): token, admin chat id, welcome text, plan-list template, auto-delete minutes, payment instructions (QRIS image upload, bank text, crypto address). "Restart bot" button.
+- **Logs** (edit): filters by type, level, actor; live tail toggle.
+- **Settings** (edit): panel domain + port change flow (re-runs nginx template + acme.sh switch), DNS provider, admin password, DB path (read-only), danger zone (reinstall xray, purge Cloudflare).
+- **Update** (already exists).
 
-### 3. Python agent API (FastAPI)
-Endpoints (all `/api/*`, JWT-protected except `/api/auth/login`):
+### Phase D — API client + mocks
 
-- `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`
-- `GET /system/status` — uptime, CPU, RAM, disk, network, service states
-- `GET /accounts?protocol=ssh|vmess|vless|trojan` — unified list
-- `POST /accounts` — create (protocol, username, expiry, IP limit, **speed limit** kbps, quota GB)
-- `PATCH /accounts/:id` — edit expiry / limits / password / uuid
-- `DELETE /accounts/:id`
-- `POST /accounts/:id/renew`
-- `GET /accounts/:id/config` — client config / QR / vmess link
-- `GET /usage/online` — currently connected users per protocol
-- `GET /usage/traffic?range=…` — per-user bytes in/out, per-user uptime
-- `GET /logs?type=audit|service|auth&limit=…` — created/edited/deleted events + service logs
-- `POST /system/update` — pull latest from GitHub, run migrations, restart agent
-- `GET /system/version` — current commit + latest available
+Extend `src/lib/api.ts` and `src/lib/mock.ts` with `plans`, `payments`, `bot`, `settings`, `traffic` endpoints so every new page is clickable in Lovable preview.
 
-**Speed limit** enforced via `tc` (HTB) per-user classid, keyed to account id; installer adds a helper script the agent calls on create/edit.
+## Technical notes
 
-### 4. Web UI (TanStack Start in this Lovable project)
-Pages:
-- `/login` — admin auth
-- `/` — Dashboard: uptime, resources, online users, traffic today, service health cards, version + Update button
-- `/accounts` — unified table across protocols with filters, bulk actions, create/edit drawer
-- `/accounts/:id` — detail: config/QR, live traffic chart, uptime, activity log
-- `/logs` — audit + service log viewer with filters
-- `/settings` — admin password, DB path (read-only display), cert renewal, danger zone
-- `/update` — shows current vs latest commit, changelog, one-click apply
+- **Traffic graph source**: `xray stats` API + `iptables -w -nvxL` counters per user (already how the CLI does it). Sampler writes 1-minute rows, dashboard aggregates to hourly.
+- **Speed limit**: `tc qdisc` HTB per-user classid, mapped by account id. Wrapper `tc_limit.sh` called on create/edit/delete.
+- **Bot ↔ agent auth**: `BOT_INTERNAL_TOKEN` shared secret in `/etc/autoscript/agent.env`, sent as `X-Internal-Token` header. Bot never talks to the DB directly — only through the agent, so all business rules (quota checks, expiry, audit logs) stay in one place.
+- **Auto-delete**: scheduled with `asyncio.create_task(sleep + delete)` inside the bot; also persisted so a bot restart re-schedules pending deletions.
+- **Payment approval**: bot uploads the proof file to `/etc/autoscript/uploads/`; the panel serves it via signed URL from the agent.
+- **Domain/port change**: `/settings/apply` rewrites nginx template, reissues cert if domain changed, restarts nginx + xray + agent — all from the panel, no SSH needed.
 
-Clean modern shell (sidebar + top bar), no clutter, keyboard-friendly, dark/light.
+## Out of scope (still)
 
-### 5. Auto-update flow
-- Agent stores install root as a git checkout of your GitHub repo.
-- `POST /system/update` runs: `git fetch && git reset --hard origin/main`, executes `scripts/migrate.sh` if present, then `systemctl restart autoscript-agent nginx`. Web UI assets rebuilt from a shipped `dist/` in the repo so no Node needed on the VPS.
-- Version endpoint compares local HEAD vs `origin/main` via `git ls-remote`.
+- Multi-VPS orchestration.
+- Reseller sub-accounts.
+- Mobile app.
 
-## Out of scope for Phase 1 (call out explicitly)
-- Multi-VPS management from one panel
-- Payments / reseller accounts
-- Telegram bot rework (kept as-is or disabled)
-- Mobile app
+## One thing I still need from you
 
-## Deliverables in this Lovable project
-Because Lovable runs the **web UI** side, this project will contain:
-- The TanStack Start web app (all pages above), talking to `/api/*`.
-- A `backend/` folder with the Python FastAPI agent source, systemd unit, and the rewritten English bash installer + Nginx templates + SSH-WS config — copied to the VPS by the installer.
-- README with install one-liner: `bash <(curl -fsSL https://raw.githubusercontent.com/<you>/<repo>/main/install.sh)`
-
-## Open items to confirm before I start building
-1. **GitHub repo URL** (for installer + self-update source).
-2. **acme.sh DNS provider** for wildcard mode (Cloudflare API? something else?) — needed for automated wildcard issuance.
-3. Keep the existing **Telegram bot** running untouched, or disable it in Phase 1?
-4. Any protocols beyond SSH / VMess / VLESS / Trojan currently in use that must appear in the unified accounts table (Shadowsocks, WireGuard, OpenVPN)?
-
-Once you confirm those four, I'll switch to build mode and start with the web UI scaffold + agent API contracts, then the installer rewrite.
+**GitHub repo URL** for the installer's `curl | bash` one-liner and the self-update source. Say the word and I start Phase A.
