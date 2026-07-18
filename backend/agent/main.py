@@ -365,7 +365,7 @@ async def _strip_api_and_call(request: Request, call_next):
 
 # ---- Auth ------------------------------------------------------------------
 @app.post("/auth/login")
-def auth_login(inp: LoginIn, response: Response):
+def auth_login(inp: LoginIn, request: Request, response: Response):
     ok = False
     if inp.username == ADMIN_USER and ADMIN_HASH:
         try:
@@ -376,8 +376,10 @@ def auth_login(inp: LoginIn, response: Response):
                 ok = _c.crypt(inp.password, ADMIN_HASH) == ADMIN_HASH
         except Exception:
             ok = False
+    client_ip = (request.client.host if request.client else "-")
     if not ok:
-        log("auth", "auth.login.fail", f"Failed login for {inp.username}", level="warn", actor=inp.username)
+        print(f"Failed login for {inp.username} from {client_ip}", flush=True)
+        log("auth", "auth.login.fail", f"Failed login for {inp.username} from {client_ip}", level="warn", actor=inp.username)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
     token = make_token(inp.username)
     response.set_cookie("token", token, httponly=True, secure=True, samesite="lax", max_age=JWT_TTL)
