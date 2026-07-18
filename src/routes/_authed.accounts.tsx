@@ -294,13 +294,23 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
               <Switch checked={!!f.cdn} onCheckedChange={(v) => setF({ ...f, cdn: v })} />
             </div>
             <div className="flex items-center justify-between rounded-md border border-border/60 bg-background/40 p-3">
-              <div>
-                <div className="text-sm">Trial (1 hour)</div>
-                <div className="text-xs text-muted-foreground">Auto-deletes on expiry</div>
+              <div className="min-w-0">
+                <div className="text-sm">Trial (hours)</div>
+                <div className="text-xs text-muted-foreground">Overrides expiry. 0 = disabled.</div>
               </div>
-              <Switch checked={!!f.trial} onCheckedChange={(v) => setF({ ...f, trial: v })} />
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number" min={0} step={1}
+                  className="w-20 text-right"
+                  value={trialHours}
+                  onChange={(e) => setTrialHours(Math.max(0, +e.target.value || 0))}
+                />
+                <Button type="button" size="sm" variant="outline" onClick={() => setTrialHours(1)}>1h</Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => setTrialHours(24)}>24h</Button>
+              </div>
             </div>
           </div>
+
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
