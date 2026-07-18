@@ -40,7 +40,7 @@ con.commit(); con.close()
 PY
 }
 restart_stack() {
-  systemctl restart autoscript-agent autoscript-ssh-ws autoscript-bot 2>/dev/null || true
+  systemctl restart autoscript-agent autoscript-ssh-ws autoscript-bot autoscript-web 2>/dev/null || true
   systemctl reload-or-restart nginx 2>/dev/null || true
 }
 # Read from the controlling terminal so commands still work with piped/stdin use.
