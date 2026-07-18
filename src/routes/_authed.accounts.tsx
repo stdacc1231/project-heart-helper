@@ -163,6 +163,7 @@ function AccountsPage() {
       </Card>
 
       <CreateDialog open={open} onOpenChange={setOpen} />
+      <TrialDialog open={trialOpen} onOpenChange={setTrialOpen} />
     </div>
   );
 }
