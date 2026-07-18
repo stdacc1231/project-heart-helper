@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Plus, Trash2, Pencil, Search, Copy, Send, Zap, Clock } from "lucide-react";
@@ -29,6 +29,7 @@ function AccountsPage() {
   const [trialOpen, setTrialOpen] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { data } = useQuery({
     queryKey: ["accounts", proto],
     queryFn: () => api.accounts.list(proto === "all" ? undefined : proto),
@@ -116,8 +117,12 @@ function AccountsPage() {
           </TableHeader>
           <TableBody>
             {filtered.map((a) => (
-              <TableRow key={a.id} className={selected[a.id] ? "bg-primary/5" : ""}>
-                <TableCell>
+              <TableRow
+                key={a.id}
+                className={`${selected[a.id] ? "bg-primary/5" : ""} cursor-pointer hover:bg-muted/30`}
+                onClick={() => navigate({ to: "/accounts/$id", params: { id: a.id } })}
+              >
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <Checkbox checked={!!selected[a.id]} onCheckedChange={(v) => setSelected((s) => ({ ...s, [a.id]: !!v }))} />
                 </TableCell>
                 <TableCell className="font-medium">
@@ -140,7 +145,7 @@ function AccountsPage() {
                     a.status === "locked" ? "border-warning/40 text-warning" : "border-destructive/40 text-destructive"
                   }>{a.status}</Badge>
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" title="Copy subscription URL" onClick={() => copySub(a.id)}><Copy className="h-4 w-4" /></Button>
                   <Button variant="ghost" size="icon" title="Send via Telegram" onClick={() => api.accounts.sendTelegram(a.id).then(() => toast.success("Sent"))}><Send className="h-4 w-4" /></Button>
                   <Button variant="ghost" size="icon" asChild title="Edit">
