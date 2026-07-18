@@ -1,0 +1,23 @@
+[Unit]
+Description=Autoscript Web (TanStack Start Nitro node-server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/autoscript/agent.env
+Environment=HOST=127.0.0.1
+Environment=NODE_ENV=production
+WorkingDirectory=/opt/autoscript
+ExecStart=/usr/bin/node /opt/autoscript/.output/server/index.mjs
+Restart=on-failure
+RestartSec=3
+User=root
+NoNewPrivileges=false
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
