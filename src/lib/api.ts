@@ -42,7 +42,11 @@ export interface Account {
 
 export interface Plan {
   id: string; name: string;
-  mode: "prepaid" | "payg_gb";
+export type PlanMode = "prepaid" | "payg_gb" | "payg_day";
+
+export interface Plan {
+  id: string; name: string;
+  mode: PlanMode;
   priceCents: number;
   durationDays: number;
   quotaGb: number;
@@ -94,6 +98,7 @@ export interface BotSettings {
   welcomeText: string;
   autoDeleteMinutes: number;
   paymentInstructions: string;
+  paymentQrUrl?: string;
   running: boolean;
 }
 
