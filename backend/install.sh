@@ -52,15 +52,29 @@ build_web_ui() {
   if command -v bun >/dev/null 2>&1 && [[ -f bun.lock || -f bun.lockb ]]; then
     bun install --production=false
     bun run build
-    return
-  fi
-
-  if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
-    npm ci --no-audit --no-fund
   else
-    npm install --no-audit --no-fund
+    if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
+      npm ci --no-audit --no-fund
+    else
+      npm install --no-audit --no-fund
+    fi
+    npm run build
   fi
-  npm run build
+  # Normalise the SPA output into "$INSTALL_ROOT/dist" so the FastAPI agent
+  # can serve it regardless of which framework/build tool produced it.
+  local src=""
+  for cand in dist .output/public build out; do
+    if [[ -f "$INSTALL_ROOT/$cand/index.html" ]]; then src="$INSTALL_ROOT/$cand"; break; fi
+  done
+  if [[ -z "$src" ]]; then
+    warn "No index.html found in dist/.output/public/build/out — SPA will not load."
+    return 1
+  fi
+  if [[ "$src" != "$INSTALL_ROOT/dist" ]]; then
+    rm -rf "$INSTALL_ROOT/dist"
+    cp -a "$src" "$INSTALL_ROOT/dist"
+  fi
+  ok "SPA staged at $INSTALL_ROOT/dist (from ${src#$INSTALL_ROOT/})"
 }
 # Read from the controlling terminal so `bash <(curl ...)` still works
 # (otherwise stdin is the piped script and every `read` hits EOF).
@@ -152,22 +166,39 @@ ACME=~/.acme.sh/acme.sh
 mkdir -p "$CONF_DIR/certs" "$CONF_DIR/uploads"
 CERT_DIR="$CONF_DIR/certs"
 
+issue_cert() {
+  # $1 = "wildcard"|"single"; runs with --force so a re-install refreshes an
+  # already-issued cert instead of aborting with "domain already exists".
+  local mode="$1" rc=0
+  if [[ "$mode" == "wildcard" ]]; then
+    "$ACME" --issue --dns "$DNS_API" -d "$ROOT_DOMAIN" -d "*.$ROOT_DOMAIN" --keylength ec-256 --force || rc=$?
+  else
+    systemctl stop nginx 2>/dev/null || true
+    "$ACME" --issue --standalone -d "$PANEL_DOMAIN" --keylength ec-256 --force || rc=$?
+  fi
+  # rc=2 means "cert not renewed yet" — fine, we just install the existing one.
+  if [[ $rc -ne 0 && $rc -ne 2 ]]; then
+    warn "acme.sh issue failed (rc=$rc). If the cert already exists this is safe to ignore."
+  fi
+}
+
 if [[ "$TLS_MODE" == "2" ]]; then
   say "Issuing wildcard cert for *.${ROOT_DOMAIN} via ${DNS_API}"
-  "$ACME" --issue --dns "$DNS_API" -d "$ROOT_DOMAIN" -d "*.$ROOT_DOMAIN" --keylength ec-256
+  issue_cert wildcard
   "$ACME" --install-cert -d "$ROOT_DOMAIN" --ecc \
      --fullchain-file "$CERT_DIR/fullchain.pem" \
      --key-file       "$CERT_DIR/privkey.pem"  \
      --reloadcmd     "systemctl reload-or-restart nginx; systemctl restart autoscript-agent xray 2>/dev/null || true"
 else
   say "Issuing single-domain cert for ${PANEL_DOMAIN} via HTTP-01"
-  systemctl stop nginx 2>/dev/null || true
-  "$ACME" --issue --standalone -d "$PANEL_DOMAIN" --keylength ec-256
+  issue_cert single
   "$ACME" --install-cert -d "$PANEL_DOMAIN" --ecc \
      --fullchain-file "$CERT_DIR/fullchain.pem" \
      --key-file       "$CERT_DIR/privkey.pem"  \
      --reloadcmd     "systemctl reload-or-restart nginx; systemctl restart autoscript-agent xray 2>/dev/null || true"
 fi
+[[ -s "$CERT_DIR/fullchain.pem" && -s "$CERT_DIR/privkey.pem" ]] \
+  || die "Certificate files missing at $CERT_DIR — cannot continue."
 ok "TLS installed at $CERT_DIR"
 
 # --------------------------------------------------------------------------

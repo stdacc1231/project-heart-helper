@@ -762,11 +762,17 @@ def logs_list(type: Optional[str] = None, limit: int = 200, _: str = Depends(req
 
 # ---- SPA (must be registered last so /api/* and other routes take priority)
 try:
-    from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse, PlainTextResponse
     from fastapi.staticfiles import StaticFiles
 
-    _DIST = Path(INSTALL_ROOT) / "dist"
-    if _DIST.is_dir():
+    _DIST = None
+    for _cand in ("dist", ".output/public", "build", "out"):
+        _p = Path(INSTALL_ROOT) / _cand
+        if (_p / "index.html").exists():
+            _DIST = _p
+            break
+
+    if _DIST is not None:
         _INDEX = _DIST / "index.html"
 
         class _SPA(StaticFiles):
@@ -779,6 +785,13 @@ try:
                     raise
 
         app.mount("/", _SPA(directory=str(_DIST), html=True), name="spa")
-except Exception:
-    pass
+    else:
+        @app.get("/")
+        def _no_spa():
+            return PlainTextResponse(
+                "SPA build not found. Run: autoscript update\n",
+                status_code=503,
+            )
+except Exception as _e:
+    print(f"spa-mount-failed: {_e}", flush=True)
 
