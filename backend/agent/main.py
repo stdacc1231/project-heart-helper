@@ -455,7 +455,8 @@ def provision_account(a: dict) -> None:
         r = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, check=False)
         if r.returncode != 0:
             raise HTTPException(500, (r.stderr or r.stdout or "Provisioning failed").strip()[:500])
-    apply_speed_limit(a["username"], a["speedUpKbps"], a["speedDnKbps"])
+    limit_user = ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"]
+    apply_speed_limit(limit_user, a["speedUpKbps"], a["speedDnKbps"])
 
 
 def revoke_account(a: dict) -> None:
@@ -837,7 +838,8 @@ def accounts_update(aid: str, patch: AccountPatch, user: str = Depends(require_a
     if a["protocol"] == "ssh" and (patch.password is not None or patch.expiresAt is not None):
         provision_account(a)
     elif patch.speedUpKbps is not None or patch.speedDnKbps is not None:
-        apply_speed_limit(a["username"], a["speedUpKbps"], a["speedDnKbps"])
+        limit_user = ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"]
+        apply_speed_limit(limit_user, a["speedUpKbps"], a["speedDnKbps"])
     log("audit", "account.update", f"Updated {r['protocol']} account {r['username']}",
         actor=user, target=r["username"])
     return a
@@ -859,7 +861,7 @@ def accounts_delete(aid: str, user: str = Depends(require_auth)):
 def accounts_config(aid: str, user: str = Depends(require_auth)):
     a = accounts_get(aid, user)
     host = kv_get(f"hosts.{a['protocol']}", "") or kv_get("panel.domain", PANEL_DOMAIN)
-    port = int(kv_get(f"ports.{a['protocol']}", "") or kv_get("panel.port", str(PANEL_PORT)) or PANEL_PORT)
+    port = int(kv_get(f"ports.{a['protocol']}", "") or "443")
     if a["protocol"] == "ssh":
         login_user = ssh_login_username(a["username"])
         return {"link": f"ssh://{login_user}:{a['password']}@{host}:22",
