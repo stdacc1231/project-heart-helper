@@ -23,7 +23,7 @@ interface MockDB {
   wallet: WalletTx[];
   walletBalanceCents: number;
   invoices: Invoice[];
-  resellers: Reseller[];
+  
 }
 
 function load(): MockDB {
