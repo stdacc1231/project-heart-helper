@@ -37,8 +37,8 @@ export interface Account {
   cdn?: boolean;             // route through Cloudflare
   subscriptionToken?: string;
   trial?: boolean;
-  nodeId?: string;
 }
+
 
 export type PlanMode = "prepaid" | "payg_gb" | "payg_day";
 
@@ -100,6 +100,9 @@ export interface BotSettings {
   running: boolean;
 }
 
+export type ProtoKey = Protocol;
+export interface ProtoEndpoint { host?: string; port?: number; path?: string; }
+
 export interface PanelSettings {
   domain: string;
   port: number;
@@ -110,7 +113,13 @@ export interface PanelSettings {
   repoUrl: string;
   cdn?: { enabled: boolean; provider: "cloudflare" | "custom"; realIpHeader: string };
   bbr?: boolean;
+  // Multi-port TLS/plain listeners (Cloudflare-supported)
+  tlsPorts: number[];      // e.g. [443, 2053, 2083, 2087, 2096, 8443]
+  plainPorts: number[];    // e.g. [80, 8080, 8880, 2052, 2082, 2086, 2095]
+  // Per-protocol host/port overrides. Blank host = fall back to panel main domain.
+  endpoints: Partial<Record<Protocol, ProtoEndpoint>>;
 }
+
 
 export interface SystemStatus {
   uptimeSeconds: number;
@@ -152,19 +161,19 @@ export interface LiveConnection {
   txBytes: number;
 }
 
-export interface Node {
-  id: string;
-  label: string;
-  host: string;
-  region: string;
-  status: "online" | "offline" | "degraded";
-  users: number;
-  cpu: number;
-  memory: number;
-  bandwidthMbps: number;
-  version: string;
-  lastSeen: string;
+export interface UserTraffic { t: string; rxBytes: number; txBytes: number; }
+export interface UserDetail {
+  account: Account;
+  planName?: string;
+  configLink: string;
+  configText: string;
+  subscriptionUrl: string;
+  daysRemaining: number;
+  hourly: UserTraffic[];   // last 24h
+  daily: UserTraffic[];    // last 30d
+  activeIps: { ip: string; country?: string; lastSeen: string }[];
 }
+
 
 export interface Backup {
   id: string;
@@ -231,16 +240,14 @@ export const api = {
     async importCsv(csv: string) { return IS_PREVIEW ? mock.importCsv(csv) : req<{ created: number }>("/accounts/import", { method: "POST", body: JSON.stringify({ csv }) }); },
     async exportCsv() { return IS_PREVIEW ? mock.exportCsv() : req<{ csv: string }>("/accounts/export"); },
     async sendTelegram(id: string) { return IS_PREVIEW ? mock.sendTelegram(id) : req(`/accounts/${id}/telegram`, { method: "POST" }); },
+    async detail(id: string) { return IS_PREVIEW ? mock.userDetail(id) : req<UserDetail>(`/accounts/${id}/detail`); },
+    async rotateToken(id: string) { return IS_PREVIEW ? mock.rotateToken(id) : req<{ token: string }>(`/accounts/${id}/rotate-token`, { method: "POST" }); },
   },
   connections: {
     async list() { return IS_PREVIEW ? mock.listConnections() : req<LiveConnection[]>("/connections"); },
     async kick(id: string) { return IS_PREVIEW ? mock.kickConnection(id) : req(`/connections/${id}/kick`, { method: "POST" }); },
   },
-  nodes: {
-    async list() { return IS_PREVIEW ? mock.listNodes() : req<Node[]>("/nodes"); },
-    async add(n: Partial<Node>) { return IS_PREVIEW ? mock.addNode(n) : req<Node>("/nodes", { method: "POST", body: JSON.stringify(n) }); },
-    async remove(id: string) { return IS_PREVIEW ? mock.removeNode(id) : req(`/nodes/${id}`, { method: "DELETE" }); },
-  },
+
   backups: {
     async list() { return IS_PREVIEW ? mock.listBackups() : req<Backup[]>("/backups"); },
     async create(destination: Backup["destination"]) { return IS_PREVIEW ? mock.createBackup(destination) : req<Backup>("/backups", { method: "POST", body: JSON.stringify({ destination }) }); },
