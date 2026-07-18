@@ -189,6 +189,10 @@ if [[ -x "$INSTALL_ROOT/backend/scripts/setup_xray.sh" ]]; then
   PANEL_DOMAIN="$PANEL_DOMAIN" CERT_DIR="$CERT_DIR" bash "$INSTALL_ROOT/backend/scripts/setup_xray.sh" || true
 fi
 
+# --------------------------------------------------------------------------
+say "Installing admin CLI  ->  /usr/local/bin/autoscript"
+install -m 755 "$INSTALL_ROOT/backend/cli.sh" /usr/local/bin/autoscript
+
 ok "Installation complete."
 echo
 echo "  Panel URL      : https://${PANEL_DOMAIN}:${PANEL_PORT}"
@@ -198,6 +202,7 @@ echo "  Admin user     : ${ADMIN_USER}"
 echo "  DB path        : ${DB_PATH}"
 echo "  Repo           : ${REPO}"
 echo
-echo "  Uninstall      : bash ${INSTALL_ROOT}/backend/uninstall.sh"
+echo "  Admin CLI      : run  ${BLD:-}autoscript${RST:-}   (menu with reset/domain/update/uninstall)"
+echo "  Uninstall      : autoscript uninstall   (or bash ${INSTALL_ROOT}/backend/uninstall.sh)"
 echo
 echo "Set per-protocol hosts in Panel → Settings → Protocol endpoints."
