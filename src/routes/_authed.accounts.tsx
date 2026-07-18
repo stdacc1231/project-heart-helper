@@ -273,13 +273,13 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
             <Input type="number" value={f.ipLimit} onChange={(e) => setF({ ...f, ipLimit: +e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Down (kbps, 0 = ∞)</Label>
-            <Input type="number" value={f.speedDnKbps} onChange={(e) => setF({ ...f, speedDnKbps: +e.target.value })} />
+            <Label>Down (Mbps, 0 = ∞)</Label>
+            <Input type="number" step="0.1" min="0" value={(f.speedDnKbps ?? 0)/1000} onChange={(e) => setF({ ...f, speedDnKbps: Math.round((+e.target.value) * 1000) })} />
           </div>
 
           <div className="space-y-1.5">
-            <Label>Up (kbps, 0 = ∞)</Label>
-            <Input type="number" value={f.speedUpKbps} onChange={(e) => setF({ ...f, speedUpKbps: +e.target.value })} />
+            <Label>Up (Mbps, 0 = ∞)</Label>
+            <Input type="number" step="0.1" min="0" value={(f.speedUpKbps ?? 0)/1000} onChange={(e) => setF({ ...f, speedUpKbps: Math.round((+e.target.value) * 1000) })} />
           </div>
           <div className="space-y-1.5">
             <Label>Quota GB (0 = ∞)</Label>
