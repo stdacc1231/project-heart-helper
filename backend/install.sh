@@ -166,15 +166,23 @@ ACME=~/.acme.sh/acme.sh
 mkdir -p "$CONF_DIR/certs" "$CONF_DIR/uploads"
 CERT_DIR="$CONF_DIR/certs"
 
+cert_exists() {
+  # returns 0 if acme.sh already has a cert directory for $1 (ecc or rsa)
+  [[ -d "$HOME/.acme.sh/${1}_ecc" ]] || [[ -d "$HOME/.acme.sh/${1}" ]]
+}
+
 issue_cert() {
-  # $1 = "wildcard"|"single"; runs with --force so a re-install refreshes an
-  # already-issued cert instead of aborting with "domain already exists".
-  local mode="$1" rc=0
+  # $1 = "wildcard"|"single". Only pass --force when a cert already exists,
+  # so fresh installs run a normal issuance and reinstalls refresh cleanly
+  # (e.g. a cert issued 10 min ago won't abort with "domain already exists").
+  local mode="$1" rc=0 force=""
   if [[ "$mode" == "wildcard" ]]; then
-    "$ACME" --issue --dns "$DNS_API" -d "$ROOT_DOMAIN" -d "*.$ROOT_DOMAIN" --keylength ec-256 --force || rc=$?
+    cert_exists "$ROOT_DOMAIN" && { force="--force"; say "Existing cert for ${ROOT_DOMAIN} found — reissuing with --force"; }
+    "$ACME" --issue --dns "$DNS_API" -d "$ROOT_DOMAIN" -d "*.$ROOT_DOMAIN" --keylength ec-256 $force || rc=$?
   else
+    cert_exists "$PANEL_DOMAIN" && { force="--force"; say "Existing cert for ${PANEL_DOMAIN} found — reissuing with --force"; }
     systemctl stop nginx 2>/dev/null || true
-    "$ACME" --issue --standalone -d "$PANEL_DOMAIN" --keylength ec-256 --force || rc=$?
+    "$ACME" --issue --standalone -d "$PANEL_DOMAIN" --keylength ec-256 $force || rc=$?
   fi
   # rc=2 means "cert not renewed yet" — fine, we just install the existing one.
   if [[ $rc -ne 0 && $rc -ne 2 ]]; then
