@@ -156,6 +156,18 @@ export interface LiveConnection {
 }
 
 export interface UserTraffic { t: string; rxBytes: number; txBytes: number; }
+export interface ConnectionProfile {
+  label: string;
+  network: string;
+  security: string;
+  host: string;
+  port: number;
+  path?: string;
+  username?: string;
+  password?: string;
+  link: string;
+  text: string;
+}
 export interface UserDetail {
   account: Account;
   planName?: string;
@@ -166,6 +178,12 @@ export interface UserDetail {
   hourly: UserTraffic[];   // last 24h
   daily: UserTraffic[];    // last 30d
   activeIps: { ip: string; country?: string; lastSeen: string }[];
+  loginUsername?: string;
+  host?: string;
+  tlsPorts?: number[];
+  plainPorts?: number[];
+  connectionProfiles?: ConnectionProfile[];
+  usage?: { totalBytes: number; limitBytes: number; remainingBytes: number };
 }
 
 
