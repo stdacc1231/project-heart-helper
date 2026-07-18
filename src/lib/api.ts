@@ -64,9 +64,10 @@ export interface VersionInfo {
   repo: string;
 }
 
+// Treat SSR and Lovable preview as "no real backend" — use mocks.
 const IS_PREVIEW =
-  typeof window !== "undefined" &&
-  /lovable\.app$|localhost/.test(window.location.hostname);
+  typeof window === "undefined" ||
+  /lovable\.(app|dev)$|lovableproject\.com$|localhost/.test(window.location.hostname);
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
