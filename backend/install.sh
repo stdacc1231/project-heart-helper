@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Autoscript Web Panel — installer (English, all-in-one).
-# Ubuntu 22.04 / 24.04 / Debian 12. Run as root.
+# Ubuntu 22.04/24.04, Debian 12. Run as root.
 set -euo pipefail
 
 RED=$'\e[31m'; GRN=$'\e[32m'; YLW=$'\e[33m'; BLU=$'\e[36m'; RST=$'\e[0m'
@@ -16,16 +16,20 @@ INSTALL_ROOT="/opt/autoscript"
 CONF_DIR="/etc/autoscript"
 DB_DEFAULT="${CONF_DIR}/db.sqlite"
 
+# All Cloudflare-supported ports for WebSocket tunnelling.
+TLS_PORTS_DEFAULT="443,2053,2083,2087,2096,8443"
+PLAIN_PORTS_DEFAULT="80,8080,8880,2052,2082,2086,2095"
+
 # --------------------------------------------------------------------------
 say "Autoscript Web Panel installer"
-read -rp "Panel domain (e.g. panel.example.com): " PANEL_DOMAIN
+read -rp "Panel MAIN domain (e.g. panel.example.com): " PANEL_DOMAIN
 [[ -n "$PANEL_DOMAIN" ]] || die "Domain is required."
 
-read -rp "Panel HTTPS port [443]: " PANEL_PORT
+read -rp "Primary HTTPS port [443]: " PANEL_PORT
 PANEL_PORT=${PANEL_PORT:-443}
 
 echo "Certificate mode:"
-echo "  1) Single domain   (HTTP-01, easy)"
+echo "  1) Single domain   (HTTP-01)"
 echo "  2) Wildcard        (DNS-01 via acme.sh — needs DNS API credentials)"
 read -rp "Choose [1-2]: " TLS_MODE
 TLS_MODE=${TLS_MODE:-1}
@@ -33,8 +37,6 @@ TLS_MODE=${TLS_MODE:-1}
 DNS_API=""; ROOT_DOMAIN=""
 if [[ "$TLS_MODE" == "2" ]]; then
   read -rp "Root domain for wildcard (e.g. example.com): " ROOT_DOMAIN
-  echo "Common acme.sh DNS modules: dns_cf (Cloudflare), dns_gandi_livedns, dns_do (DigitalOcean),"
-  echo "dns_namecheap, dns_gd (GoDaddy). See https://github.com/acmesh-official/acme.sh/wiki/dnsapi"
   read -rp "acme.sh DNS module [dns_cf]: " DNS_API
   DNS_API=${DNS_API:-dns_cf}
   warn "Export the API credentials for ${DNS_API} in the environment before continuing."
@@ -45,7 +47,7 @@ ADMIN_USER=${ADMIN_USER:-admin}
 read -rsp "Admin password: " ADMIN_PASS; echo
 [[ -n "$ADMIN_PASS" ]] || die "Password is required."
 
-read -rp "Telegram bot token (optional, blank to set later in panel): " BOT_TOKEN
+read -rp "Telegram bot token (optional): " BOT_TOKEN
 read -rp "Telegram admin chat ID (optional): " BOT_ADMIN_CHAT
 
 read -rp "Database path [${DB_DEFAULT}]: " DB_PATH
@@ -59,7 +61,7 @@ say "Installing system packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y --no-install-recommends \
-  git curl wget ca-certificates jq socat cron \
+  git curl wget ca-certificates jq socat cron sqlite3 \
   python3 python3-venv python3-pip \
   nginx iproute2 iptables uuid-runtime openssl
 
@@ -138,60 +140,64 @@ python3 -m venv "$INSTALL_ROOT/backend/.venv"
 "$INSTALL_ROOT/backend/.venv/bin/pip" install --upgrade pip
 "$INSTALL_ROOT/backend/.venv/bin/pip" install -r "$INSTALL_ROOT/backend/agent/requirements.txt"
 
-# Seed default bot settings from installer input
+# Seed defaults into DB
 "$INSTALL_ROOT/backend/.venv/bin/python" - <<PY
 import os, sqlite3, pathlib
-db_path = os.environ.get("DB_PATH", "${DB_PATH}")
+db_path = "${DB_PATH}"
 pathlib.Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 con = sqlite3.connect(db_path)
-con.executescript("""CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);""")
+con.executescript("CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);")
 def kv(k,v):
     con.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(k,v))
-kv("bot.token", "${BOT_TOKEN}")
-kv("bot.adminChatId", "${BOT_ADMIN_CHAT}")
-kv("bot.enabled", "1" if "${BOT_TOKEN}" else "0")
-kv("bot.welcomeText", "Welcome! Tap a plan to purchase.")
-kv("bot.paymentInstructions", "Send payment and reply here with a screenshot of the receipt.")
-kv("bot.autoDeleteMinutes", "10")
-kv("panel.tlsMode", "${TLS_MODE}" == "2" and "wildcard" or "single")
-kv("panel.dnsProvider", "${DNS_API}")
-kv("panel.rootDomain", "${ROOT_DOMAIN}")
+kv("panel.domain",       "${PANEL_DOMAIN}")
+kv("panel.port",         "${PANEL_PORT}")
+kv("panel.tlsMode",      "wildcard" if "${TLS_MODE}"=="2" else "single")
+kv("panel.dnsProvider",  "${DNS_API}")
+kv("panel.rootDomain",   "${ROOT_DOMAIN}")
+kv("panel.tlsPorts",     "${TLS_PORTS_DEFAULT}")
+kv("panel.plainPorts",   "${PLAIN_PORTS_DEFAULT}")
+kv("bot.token",          "${BOT_TOKEN}")
+kv("bot.adminChatId",    "${BOT_ADMIN_CHAT}")
+kv("bot.enabled",        "1" if "${BOT_TOKEN}" else "0")
+kv("bot.welcomeText",    "Welcome! Tap a plan to purchase.")
+kv("bot.paymentInstructions","Send payment and reply here with a screenshot of the receipt.")
+kv("bot.autoDeleteMinutes","10")
 con.commit(); con.close()
 PY
 
 # --------------------------------------------------------------------------
-say "Configuring Nginx"
-install -m 644 "$INSTALL_ROOT/backend/nginx/panel.conf.tpl" /etc/nginx/sites-available/autoscript-panel.conf
-sed -i "s|__DOMAIN__|${PANEL_DOMAIN}|g; s|__PORT__|${PANEL_PORT}|g; s|__ROOT__|${INSTALL_ROOT}|g; s|__CERT__|${CERT_DIR}|g" \
-    /etc/nginx/sites-available/autoscript-panel.conf
-ln -sf /etc/nginx/sites-available/autoscript-panel.conf /etc/nginx/sites-enabled/autoscript-panel.conf
+say "Rendering initial Nginx vhost (multi-port CF ports)"
+chmod +x "$INSTALL_ROOT/backend/scripts/"*.sh
+bash "$INSTALL_ROOT/backend/scripts/apply_settings.sh"
 rm -f /etc/nginx/sites-enabled/default
-nginx -t
 systemctl enable --now nginx
 systemctl reload nginx
 
 # --------------------------------------------------------------------------
 say "Installing systemd units"
-install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-agent.service" /etc/systemd/system/
-install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-ssh-ws.service" /etc/systemd/system/
-install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-bot.service" /etc/systemd/system/
+install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-agent.service"       /etc/systemd/system/
+install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-ssh-ws.service"      /etc/systemd/system/
+install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-bot.service"         /etc/systemd/system/
+install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-ip-limit.service"    /etc/systemd/system/
+install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-ip-limit.timer"      /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now autoscript-agent
-systemctl enable --now autoscript-ssh-ws
-systemctl enable --now autoscript-bot
+systemctl enable --now autoscript-agent autoscript-ssh-ws autoscript-bot autoscript-ip-limit.timer
 
 # --------------------------------------------------------------------------
 if [[ -x "$INSTALL_ROOT/backend/scripts/setup_xray.sh" ]]; then
   say "Configuring xray"
-  PANEL_DOMAIN="$PANEL_DOMAIN" CERT_DIR="$CERT_DIR" bash "$INSTALL_ROOT/backend/scripts/setup_xray.sh"
+  PANEL_DOMAIN="$PANEL_DOMAIN" CERT_DIR="$CERT_DIR" bash "$INSTALL_ROOT/backend/scripts/setup_xray.sh" || true
 fi
 
 ok "Installation complete."
 echo
-echo "  Panel URL     : https://${PANEL_DOMAIN}:${PANEL_PORT}"
-echo "  Username      : ${ADMIN_USER}"
-echo "  DB path       : ${DB_PATH}"
-echo "  Repo          : ${REPO}"
-echo "  Bot           : $( [[ -n \"${BOT_TOKEN}\" ]] && echo enabled || echo 'not configured — set token in Panel > Bot' )"
+echo "  Panel URL      : https://${PANEL_DOMAIN}:${PANEL_PORT}"
+echo "  TLS ports      : ${TLS_PORTS_DEFAULT}"
+echo "  Plain ports    : ${PLAIN_PORTS_DEFAULT}   (SSH-WS on '/')"
+echo "  Admin user     : ${ADMIN_USER}"
+echo "  DB path        : ${DB_PATH}"
+echo "  Repo           : ${REPO}"
 echo
-echo "Sign in and use the Update page to pull future changes."
+echo "  Uninstall      : bash ${INSTALL_ROOT}/backend/uninstall.sh"
+echo
+echo "Set per-protocol hosts in Panel → Settings → Protocol endpoints."

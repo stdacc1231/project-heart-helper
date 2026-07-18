@@ -188,12 +188,11 @@ function AccountsPage() {
 
 function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
   const { data: plans } = useQuery({ queryKey: ["plans"], queryFn: () => api.plans.list() });
-  const { data: nodes } = useQuery({ queryKey: ["nodes"], queryFn: () => api.nodes.list() });
   const [f, setF] = useState<Partial<Account>>({
     protocol: "ssh", username: "", password: "",
     ipLimit: 2, speedUpKbps: 0, speedDnKbps: 0, quotaGb: 0,
     expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10),
-    cdn: false, trial: false, nodeId: "node-sg",
+    cdn: false, trial: false,
   });
   const qc = useQueryClient();
   const create = useMutation({
@@ -258,24 +257,18 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
             <Input placeholder="optional" value={f.telegramId ?? ""} onChange={(e) => setF({ ...f, telegramId: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Node</Label>
-            <Select value={f.nodeId ?? ""} onValueChange={(v) => setF({ ...f, nodeId: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{nodes?.map((n) => <SelectItem key={n.id} value={n.id}>{n.label} · {n.region}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
             <Label>Expires</Label>
             <Input type="date" value={f.expiresAt?.slice(0, 10)} onChange={(e) => setF({ ...f, expiresAt: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>IP limit</Label>
+            <Label>IP limit (0 = ∞)</Label>
             <Input type="number" value={f.ipLimit} onChange={(e) => setF({ ...f, ipLimit: +e.target.value })} />
           </div>
           <div className="space-y-1.5">
             <Label>Down (kbps, 0 = ∞)</Label>
             <Input type="number" value={f.speedDnKbps} onChange={(e) => setF({ ...f, speedDnKbps: +e.target.value })} />
           </div>
+
           <div className="space-y-1.5">
             <Label>Up (kbps, 0 = ∞)</Label>
             <Input type="number" value={f.speedUpKbps} onChange={(e) => setF({ ...f, speedUpKbps: +e.target.value })} />

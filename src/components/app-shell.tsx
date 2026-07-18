@@ -1,9 +1,10 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Users, ScrollText, Settings, RefreshCw, LogOut, Menu,
-  CreditCard, Package, Bot, Activity, Server, Cloud, HardDrive, BellRing,
+  CreditCard, Package, Bot, Activity, Cloud, HardDrive, BellRing,
   Wallet, FileText, ShieldCheck,
 } from "lucide-react";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -31,7 +32,6 @@ const groups: NavGroup[] = [
     { to: "/wallet",      label: "Wallet",       icon: Wallet },
   ]},
   { label: "System", items: [
-    { to: "/nodes",       label: "Nodes",        icon: Server },
     { to: "/backups",     label: "Backups",      icon: HardDrive },
     { to: "/bot",         label: "Telegram Bot", icon: Bot },
     { to: "/logs",        label: "Logs",         icon: ScrollText },
@@ -39,6 +39,7 @@ const groups: NavGroup[] = [
     { to: "/settings",    label: "Settings",     icon: Settings },
   ]},
 ];
+
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });

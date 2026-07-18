@@ -1,9 +1,10 @@
 // Mock backend for Lovable preview. Real Python agent replaces this on the VPS.
 import type {
-  Account, Alert, Backup, BotSettings, Invoice, LiveConnection, LogEntry, Node,
+  Account, Alert, Backup, BotSettings, Invoice, LiveConnection, LogEntry,
   PanelSettings, Payment, Plan, Protocol, SystemStatus, TrafficPoint,
-  VersionInfo, WalletTx,
+  UserDetail, VersionInfo, WalletTx,
 } from "./api";
+
 
 const STORAGE = "autoscript_mock_v3";
 
@@ -17,7 +18,7 @@ interface MockDB {
   settings: PanelSettings;
   startedAt: number;
   connections: LiveConnection[];
-  nodes: Node[];
+  
   backups: Backup[];
   alerts: Alert[];
   wallet: WalletTx[];
@@ -77,8 +78,8 @@ function seed(): MockDB {
         cdn: protocol === "vmess" || protocol === "vless",
         subscriptionToken: tok(),
         trial: false,
-        nodeId: i % 3 === 0 ? "node-eu" : "node-sg",
       });
+
     }
   }
 
@@ -101,11 +102,8 @@ function seed(): MockDB {
       })),
     );
 
-  const nodes: Node[] = [
-    { id: "node-sg", label: "Singapore", host: "sg1.example.com", region: "SG", status: "online", users: 34, cpu: 22, memory: 47, bandwidthMbps: 320, version: "1.0.3", lastSeen: new Date(now).toISOString() },
-    { id: "node-eu", label: "Frankfurt", host: "de1.example.com", region: "EU", status: "online", users: 21, cpu: 15, memory: 39, bandwidthMbps: 210, version: "1.0.3", lastSeen: new Date(now - 40_000).toISOString() },
-    { id: "node-us", label: "Dallas",    host: "us1.example.com", region: "US", status: "degraded", users: 12, cpu: 65, memory: 71, bandwidthMbps: 88, version: "1.0.2", lastSeen: new Date(now - 15 * 60_000).toISOString() },
-  ];
+
+
 
   const backups: Backup[] = [
     { id: "bk-1", createdAt: new Date(now - day).toISOString(),     sizeBytes: 4_600_000, kind: "scheduled", destination: "telegram", status: "ready" },
@@ -160,14 +158,18 @@ function seed(): MockDB {
     dbPath: "/etc/autoscript/db.sqlite", repoUrl: "https://github.com/your-user/autoscript.git",
     cdn: { enabled: true, provider: "cloudflare", realIpHeader: "CF-Connecting-IP" },
     bbr: true,
+    tlsPorts:   [443, 2053, 2083, 2087, 2096, 8443],
+    plainPorts: [80, 8080, 8880, 2052, 2082, 2086, 2095],
+    endpoints: {},
   };
 
   return {
     loggedIn: false, accounts, logs, plans, payments, bot, settings,
-    startedAt: now - 3 * day, connections, nodes, backups, alerts,
+    startedAt: now - 3 * day, connections, backups, alerts,
     wallet, walletBalanceCents: 1200, invoices,
   };
 }
+
 
 const wait = (ms = 120) => new Promise((r) => setTimeout(r, ms));
 const audit = (db: MockDB, action: string, message: string, target?: string) =>
@@ -238,12 +240,12 @@ export const mock = {
       status: trial ? "trial" : "active",
       telegramId: input.telegramId, planId: input.planId, note: input.note,
       cdn: input.cdn ?? false, subscriptionToken: tok(), trial,
-      nodeId: input.nodeId ?? "node-sg",
     };
     db.accounts.unshift(a);
     audit(db, "account.create", `Created ${a.protocol} account ${a.username}${trial ? " (trial)" : ""}`, a.username);
     save(db); return a;
   },
+
   async updateAccount(id: string, input: Partial<Account>) {
     const db = load(); const a = db.accounts.find((x) => x.id === id); if (!a) throw new Error("Not found");
     Object.assign(a, input); audit(db, "account.update", `Updated ${a.protocol} ${a.username}`, a.username);
@@ -320,9 +322,32 @@ export const mock = {
   async listConnections() { return load().connections; },
   async kickConnection(id: string) { const db = load(); const c = db.connections.find((x) => x.id === id); db.connections = db.connections.filter((x) => x.id !== id); if (c) audit(db, "connection.kick", `Kicked ${c.username} (${c.ip})`, c.username); save(db); return { ok: true as const }; },
 
-  async listNodes() { return load().nodes; },
-  async addNode(n: Partial<Node>) { const db = load(); const node: Node = { id: "node-" + Date.now(), label: n.label ?? "Node", host: n.host ?? "", region: n.region ?? "??", status: "online", users: 0, cpu: 0, memory: 0, bandwidthMbps: 0, version: "1.0.3", lastSeen: new Date().toISOString() }; db.nodes.unshift(node); audit(db, "node.add", `Added node ${node.label}`); save(db); return node; },
-  async removeNode(id: string) { const db = load(); const n = db.nodes.find((x) => x.id === id); db.nodes = db.nodes.filter((x) => x.id !== id); if (n) audit(db, "node.remove", `Removed node ${n.label}`); save(db); return { ok: true as const }; },
+  async rotateToken(id: string) { const db = load(); const a = db.accounts.find((x) => x.id === id); if (!a) throw new Error("Not found"); a.subscriptionToken = tok(); save(db); return { token: a.subscriptionToken }; },
+  async userDetail(id: string): Promise<UserDetail> {
+    const db = load(); const a = db.accounts.find((x) => x.id === id); if (!a) throw new Error("Not found");
+    const cfg = await mock.accountConfig(id);
+    const sub = await mock.subscriptionUrl(id);
+    const now = Date.now();
+    const hourly = Array.from({ length: 24 }, (_, i) => {
+      const f = 0.4 + Math.sin((i / 24) * Math.PI * 2) * 0.3 + Math.random() * 0.4;
+      return { t: new Date(now - (24 - i) * 3600_000).toISOString(), rxBytes: Math.floor(500_000_000 * f), txBytes: Math.floor(120_000_000 * f) };
+    });
+    const daily = Array.from({ length: 30 }, (_, i) => ({
+      t: new Date(now - (30 - i) * 86400_000).toISOString(),
+      rxBytes: Math.floor(2_500_000_000 * (0.4 + Math.random() * 0.8)),
+      txBytes: Math.floor(600_000_000 * (0.4 + Math.random() * 0.8)),
+    }));
+    const plan = db.plans.find((p) => p.id === a.planId);
+    return {
+      account: a, planName: plan?.name,
+      configLink: cfg.link, configText: cfg.text, subscriptionUrl: sub.url,
+      daysRemaining: Math.max(0, Math.floor((Date.parse(a.expiresAt) - now) / 86400_000)),
+      hourly, daily,
+      activeIps: db.connections.filter((c) => c.accountId === id).map((c) => ({ ip: c.ip, country: c.country, lastSeen: c.connectedAt })),
+    };
+  },
+
+
 
   async listBackups() { return load().backups; },
   async createBackup(destination: Backup["destination"]) { await wait(600); const db = load(); const b: Backup = { id: "bk-" + Date.now(), createdAt: new Date().toISOString(), sizeBytes: 4_500_000 + Math.floor(Math.random() * 300_000), kind: "manual", destination, status: "ready" }; db.backups.unshift(b); audit(db, "backup.create", `Created ${destination} backup`); save(db); return b; },

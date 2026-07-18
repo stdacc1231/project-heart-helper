@@ -1,0 +1,7 @@
+[Unit]
+Description=Autoscript IP-limit watcher (SSH sessions)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/autoscript/backend/scripts/ip_limit_watcher.sh
