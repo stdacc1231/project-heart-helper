@@ -35,6 +35,6 @@ and are actively purged if found from an older install.
 
 The web UI has an **Update** page. It calls `POST /api/system/update`, which
 runs `git fetch && git reset --hard origin/main` inside `/opt/autoscript`,
-executes `backend/scripts/migrate.sh` if present, then restarts
-`autoscript-agent` and `nginx`. The web UI bundle is committed under
-`dist/` in this repo so the VPS never needs Node.js.
+rebuilds the web panel with Node 22, executes `backend/scripts/migrate.sh` if
+present, then restarts `autoscript-agent`, `autoscript-web`, `autoscript-bot`,
+`autoscript-ssh-ws` and `nginx`.

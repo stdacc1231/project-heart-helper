@@ -82,8 +82,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/stdacc1231/project-heart-hel
 
 Push to `main` on this repo, then in the panel open **Update → Pull &
 Rebuild**. The agent runs `git fetch && git reset --hard origin/main`
-inside `/opt/autoscript`, applies migrations, and restarts services. The
-web UI bundle is committed under `dist/` so the VPS never needs Node.
+inside `/opt/autoscript`, rebuilds the web panel with Node 22, applies
+migrations, and restarts the agent, web server, bot, SSH-WS and Nginx.
 
 ## Per-protocol domains
 
