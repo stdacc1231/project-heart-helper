@@ -41,19 +41,31 @@ PY
 }
 restart_stack() {
   systemctl restart autoscript-agent autoscript-ssh-ws autoscript-bot 2>/dev/null || true
-  systemctl reload nginx 2>/dev/null || systemctl restart nginx || true
+  systemctl reload-or-restart nginx 2>/dev/null || true
+}
+rand_slug() { tr -dc 'a-z0-9' </dev/urandom | head -c "${1:-14}"; }
+rand_pass() { tr -dc 'A-Za-z0-9' </dev/urandom | head -c 18; }
+CF_PORTS_ALL="443 2053 2083 2087 2096 8443 80 8080 8880 2052 2082 2086 2095"
+pick_port() {
+  local p
+  while :; do
+    p=$(( (RANDOM % 40000) + 20000 ))
+    for cf in $CF_PORTS_ALL; do [[ $p -eq $cf ]] && continue 2; done
+    ss -H -tln 2>/dev/null | awk '{print $4}' | grep -q ":${p}$" && continue
+    echo "$p"; return
+  done
 }
 
 # ---------- actions ----------
 show_status() {
   echo
-  echo "${BLD}Panel${RST}       : https://${PANEL_DOMAIN}:${PANEL_PORT}"
+  echo "${BLD}Panel${RST}       : https://${PANEL_DOMAIN}:${PANEL_PORT}/${PANEL_PATH:-}/"
   echo "${BLD}Admin user${RST}  : ${ADMIN_USER}"
   echo "${BLD}DB${RST}          : ${DB_PATH}"
   echo "${BLD}Repo${RST}        : ${REPO_URL:-<none>}"
   echo "${BLD}Install dir${RST} : ${INSTALL_ROOT}"
   echo
-  for u in autoscript-agent autoscript-ssh-ws autoscript-bot nginx; do
+  for u in autoscript-agent autoscript-ssh-ws autoscript-bot nginx fail2ban; do
     printf "  %-22s %s\n" "$u" "$(systemctl is-active "$u" 2>/dev/null || echo inactive)"
   done
   echo
