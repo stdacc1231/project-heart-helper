@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
-import { Plus, Trash2, Pencil, Search, Copy, Send, Download, Upload, Zap } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Plus, Trash2, Pencil, Search, Copy, Send, Zap, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,8 +27,8 @@ function AccountsPage() {
   const [proto, setProto] = useState<Protocol | "all">("all");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  const [trialOpen, setTrialOpen] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const importRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["accounts", proto],
@@ -44,10 +44,6 @@ function AccountsPage() {
       api.accounts.bulk(action, Object.keys(selected).filter((k) => selected[k]), days),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["accounts"] }); setSelected({}); toast.success("Bulk action applied"); },
   });
-  const importCsv = useMutation({
-    mutationFn: (csv: string) => api.accounts.importCsv(csv),
-    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ["accounts"] }); toast.success(`Imported ${r.created} accounts`); },
-  });
 
   const filtered = useMemo(() => (data ?? []).filter((a) =>
     a.username.toLowerCase().includes(q.toLowerCase()) ||
@@ -60,15 +56,6 @@ function AccountsPage() {
     const { url } = await api.accounts.subscriptionUrl(id);
     await navigator.clipboard.writeText(url);
     toast.success("Subscription URL copied");
-  }
-
-  async function exportCsv() {
-    const { csv } = await api.accounts.exportCsv();
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "autoscript-accounts.csv"; a.click();
-    URL.revokeObjectURL(url);
   }
 
   return (
@@ -86,13 +73,7 @@ function AccountsPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search user or Telegram ID…" className="pl-8 w-64" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-          <Button variant="outline" size="sm" onClick={() => importRef.current?.click()}><Upload className="mr-1 h-3.5 w-3.5" /> Import CSV</Button>
-          <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={async (e) => {
-            const f = e.target.files?.[0]; if (!f) return;
-            const text = await f.text(); importCsv.mutate(text);
-            e.target.value = "";
-          }} />
-          <Button variant="outline" size="sm" onClick={exportCsv}><Download className="mr-1 h-3.5 w-3.5" /> Export</Button>
+          <Button variant="outline" size="sm" onClick={() => setTrialOpen(true)}><Clock className="mr-1 h-3.5 w-3.5" /> Trial user</Button>
           <Button onClick={() => setOpen(true)}><Plus className="mr-1 h-4 w-4" /> New account</Button>
         </div>
       </div>
@@ -182,6 +163,7 @@ function AccountsPage() {
       </Card>
 
       <CreateDialog open={open} onOpenChange={setOpen} />
+      <TrialDialog open={trialOpen} onOpenChange={setTrialOpen} />
     </div>
   );
 }
@@ -316,6 +298,87 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={() => create.mutate()} disabled={!f.username || create.isPending}>
             {create.isPending ? "Creating…" : "Create account"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TrialDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
+  const [hours, setHours] = useState<number>(1);
+  const [protocol, setProtocol] = useState<Protocol>("ssh");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [telegramId, setTelegramId] = useState("");
+  const [ipLimit, setIpLimit] = useState(1);
+  const qc = useQueryClient();
+  const create = useMutation({
+    mutationFn: () => api.accounts.create({
+      protocol, username, password, telegramId: telegramId || undefined,
+      ipLimit, speedUpKbps: 0, speedDnKbps: 0, quotaGb: 0,
+      trial: true,
+      expiresAt: new Date(Date.now() + Math.max(1, hours) * 3600_000).toISOString(),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      toast.success(`Trial account created (${hours}h)`);
+      onOpenChange(false);
+      setUsername(""); setPassword(""); setTelegramId("");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Clock className="h-4 w-4 text-accent" /> New trial user</DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Protocol</Label>
+            <Select value={protocol} onValueChange={(v) => setProtocol(v as Protocol)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {(["ssh", "vmess", "vless", "trojan"] as Protocol[]).map((p) => (
+                  <SelectItem key={p} value={p}>{PROTOCOL_LABELS[p]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Duration (hours)</Label>
+            <div className="flex items-center gap-1">
+              <Input type="number" min={1} value={hours} onChange={(e) => setHours(Math.max(1, +e.target.value || 1))} />
+              <Button type="button" size="sm" variant="outline" onClick={() => setHours(1)}>1h</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setHours(3)}>3h</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setHours(24)}>24h</Button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Username</Label>
+            <Input value={username} onChange={(e) => setUsername(e.target.value)} />
+          </div>
+          {protocol === "ssh" && (
+            <div className="space-y-1.5">
+              <Label>Password</Label>
+              <Input value={password} onChange={(e) => setPassword(e.target.value)} />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label>Telegram ID</Label>
+            <Input placeholder="optional" value={telegramId} onChange={(e) => setTelegramId(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>IP limit</Label>
+            <Input type="number" min={1} value={ipLimit} onChange={(e) => setIpLimit(+e.target.value || 1)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={() => create.mutate()} disabled={!username || create.isPending}>
+            {create.isPending ? "Creating…" : `Create trial (${hours}h)`}
           </Button>
         </DialogFooter>
       </DialogContent>
