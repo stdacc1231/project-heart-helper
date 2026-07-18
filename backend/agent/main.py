@@ -136,18 +136,37 @@ ACCOUNT_COLUMNS = {
     "note":          "TEXT",
 }
 
+PLAN_COLUMNS = {
+    "name": "TEXT NOT NULL DEFAULT ''",
+    "mode": "TEXT NOT NULL DEFAULT 'prepaid'",
+    "price_cents": "INTEGER NOT NULL DEFAULT 0",
+    "duration_days": "INTEGER NOT NULL DEFAULT 0",
+    "quota_gb": "INTEGER NOT NULL DEFAULT 0",
+    "speed_up_kbps": "INTEGER NOT NULL DEFAULT 0",
+    "speed_dn_kbps": "INTEGER NOT NULL DEFAULT 0",
+    "ip_limit": "INTEGER NOT NULL DEFAULT 2",
+    "active": "INTEGER NOT NULL DEFAULT 1",
+}
+
 
 def _migrate(con: sqlite3.Connection) -> None:
     """Backfill columns added after the first install so old DBs keep working."""
     have = {row["name"] for row in con.execute("PRAGMA table_info(accounts)").fetchall()}
-    if not have:
-        return
-    for col, decl in ACCOUNT_COLUMNS.items():
-        if col not in have:
-            try:
-                con.execute(f"ALTER TABLE accounts ADD COLUMN {col} {decl}")
-            except sqlite3.OperationalError as exc:
-                print(f"schema-migrate-skip accounts.{col}: {exc}", flush=True)
+    if have:
+        for col, decl in ACCOUNT_COLUMNS.items():
+            if col not in have:
+                try:
+                    con.execute(f"ALTER TABLE accounts ADD COLUMN {col} {decl}")
+                except sqlite3.OperationalError as exc:
+                    print(f"schema-migrate-skip accounts.{col}: {exc}", flush=True)
+    have = {row["name"] for row in con.execute("PRAGMA table_info(plans)").fetchall()}
+    if have:
+        for col, decl in PLAN_COLUMNS.items():
+            if col not in have:
+                try:
+                    con.execute(f"ALTER TABLE plans ADD COLUMN {col} {decl}")
+                except sqlite3.OperationalError as exc:
+                    print(f"schema-migrate-skip plans.{col}: {exc}", flush=True)
 
 
 @contextmanager
@@ -235,6 +254,7 @@ class AccountIn(BaseModel):
     quotaGb: int = 0
     telegramId: Optional[str] = None
     planId: Optional[str] = None
+    trial: Optional[bool] = None
 
 
 class AccountPatch(BaseModel):
@@ -276,6 +296,9 @@ class SettingsIn(BaseModel):
     dnsProvider: Optional[str] = None
     rootDomain: Optional[str] = None
     repoUrl: Optional[str] = None
+    tlsPorts: Optional[list[int]] = None
+    plainPorts: Optional[list[int]] = None
+    endpoints: Optional[dict[str, dict[str, Any]]] = None
 
 
 class PasswordIn(BaseModel):
@@ -354,11 +377,11 @@ def row_to_account(r: sqlite3.Row) -> dict:
 
 
 def row_to_plan(r: sqlite3.Row) -> dict:
-    return {"id": r["id"], "name": r["name"], "mode": r["mode"],
-            "priceCents": r["price_cents"], "durationDays": r["duration_days"],
-            "quotaGb": r["quota_gb"], "speedUpKbps": r["speed_up_kbps"],
-            "speedDnKbps": r["speed_dn_kbps"], "ipLimit": r["ip_limit"],
-            "active": bool(r["active"])}
+    return {"id": _col(r, "id"), "name": _col(r, "name", ""), "mode": _col(r, "mode", "prepaid"),
+            "priceCents": _col(r, "price_cents", 0), "durationDays": _col(r, "duration_days", 0),
+            "quotaGb": _col(r, "quota_gb", 0), "speedUpKbps": _col(r, "speed_up_kbps", 0),
+            "speedDnKbps": _col(r, "speed_dn_kbps", 0), "ipLimit": _col(r, "ip_limit", 2),
+            "active": bool(_col(r, "active", 1))}
 
 
 def apply_speed_limit(username: str, up_kbps: int, dn_kbps: int) -> None:
@@ -374,7 +397,9 @@ def provision_account(a: dict) -> None:
                "USERNAME": a["username"], "PASSWORD": a.get("password") or "",
                "UUID": a.get("uuid") or "", "EXPIRES": a["expiresAt"],
                "IP_LIMIT": str(a["ipLimit"]), "QUOTA_GB": str(a["quotaGb"])}
-        subprocess.run(["bash", str(script)], env=env, check=False)
+        r = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, check=False)
+        if r.returncode != 0:
+            raise HTTPException(500, (r.stderr or r.stdout or "Provisioning failed").strip()[:500])
     apply_speed_limit(a["username"], a["speedUpKbps"], a["speedDnKbps"])
 
 
@@ -572,6 +597,10 @@ def system_update(user: str = Depends(require_auth)):
 def system_restart(svc: str, user: str = Depends(require_auth)):
     if svc not in ("xray", "nginx", "autoscript-agent", "autoscript-web", "autoscript-bot", "autoscript-ssh-ws"):
         raise HTTPException(400, "Not allowed")
+    if svc == "xray":
+        setup = SCRIPTS / "setup_xray.sh"
+        if setup.exists():
+            subprocess.run(["bash", str(setup)], capture_output=True, text=True, check=False)
     subprocess.Popen(["systemctl", "restart", svc])
     log("audit", "system.restart", f"Restart {svc}", actor=user); return {"ok": True}
 
@@ -597,21 +626,43 @@ def accounts_get(aid: str, _: str = Depends(require_auth)):
 
 @app.post("/accounts")
 def accounts_create(inp: AccountIn, user: str = Depends(require_auth)):
+    proto = inp.protocol.lower().strip()
+    if proto not in ("ssh", "vmess", "vless", "trojan"):
+        raise HTTPException(400, "Unsupported protocol")
+    username = inp.username.strip()
+    if not username:
+        raise HTTPException(400, "Username is required")
+    try:
+        datetime.fromisoformat(inp.expiresAt.replace("Z", "+00:00"))
+    except Exception:
+        raise HTTPException(400, "Invalid expiry date")
+    password = inp.password or (_uuid.uuid4().hex[:12] if proto == "ssh" else None)
     aid = f"{inp.protocol}-{_uuid.uuid4().hex[:8]}"
-    u = None if inp.protocol == "ssh" else str(_uuid.uuid4())
-    with db() as c:
-        c.execute("""INSERT INTO accounts(id,protocol,username,password,uuid,created_at,expires_at,
-                     ip_limit,speed_up_kbps,speed_dn_kbps,quota_gb,telegram_id,plan_id)
-                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                  (aid, inp.protocol, inp.username, inp.password, u,
-                   datetime.now(timezone.utc).isoformat(), inp.expiresAt,
-                   inp.ipLimit, inp.speedUpKbps, inp.speedDnKbps, inp.quotaGb,
-                   inp.telegramId, inp.planId))
-        r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
+    u = None if proto == "ssh" else str(_uuid.uuid4())
+    try:
+        with db() as c:
+            c.execute("""INSERT INTO accounts(id,protocol,username,password,uuid,created_at,expires_at,
+                         ip_limit,speed_up_kbps,speed_dn_kbps,quota_gb,telegram_id,plan_id,status)
+                         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                      (aid, proto, username, password, u,
+                       datetime.now(timezone.utc).isoformat(), inp.expiresAt,
+                       max(0, inp.ipLimit), max(0, inp.speedUpKbps), max(0, inp.speedDnKbps), max(0, inp.quotaGb),
+                       inp.telegramId or None, inp.planId or None, "trial" if inp.trial else "active"))
+            r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
+    except sqlite3.IntegrityError as exc:
+        msg = str(exc).lower()
+        if "unique" in msg and "username" in msg:
+            raise HTTPException(409, "Username already exists")
+        raise HTTPException(400, f"Account validation failed: {exc}")
     a = row_to_account(r)
-    provision_account(a)
-    log("audit", "account.create", f"Created {inp.protocol} account {inp.username}",
-        actor=user, target=inp.username)
+    try:
+        provision_account(a)
+    except HTTPException:
+        with db() as c:
+            c.execute("DELETE FROM accounts WHERE id = ?", (aid,))
+        raise
+    log("audit", "account.create", f"Created {proto} account {username}",
+        actor=user, target=username)
     return a
 
 
