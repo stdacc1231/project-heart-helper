@@ -301,8 +301,9 @@ ${BLD}${BLU}Autoscript Admin CLI${RST}
  9) Restart services
 10) View service logs
 11) Backup /etc/autoscript + xray config
-12) Set Telegram bot token / admin id
-13) Uninstall panel
+ 12) Set Telegram bot token / admin id
+ 13) Repair xray / SSH-WS / nginx
+ 14) Uninstall panel
  0) Exit
 EOF
   ask "Choose: " c
@@ -319,7 +320,8 @@ EOF
    10) view_logs ;;
    11) backup_now ;;
    12) reset_bot ;;
-   13) uninstall_all; exit 0 ;;
+    13) repair_services ;;
+    14) uninstall_all; exit 0 ;;
     0) exit 0 ;;
     *) warn "Unknown option" ;;
   esac
@@ -337,10 +339,11 @@ case "${1:-}" in
   set-repo)       change_repo_url ;;
   update)         update_now ;;
   restart)        restart_services ;;
+  repair-services) repair_services ;;
   logs)           view_logs ;;
   backup)         backup_now ;;
   set-bot)        reset_bot ;;
   uninstall)      uninstall_all ;;
   ""|menu)        menu ;;
-  *) echo "usage: autoscript [status|reset-user|reset-pass|set-domain|set-port|set-path|set-repo|update|restart|logs|backup|set-bot|uninstall]"; exit 1;;
+  *) echo "usage: autoscript [status|reset-user|reset-pass|set-domain|set-port|set-path|set-repo|update|restart|repair-services|logs|backup|set-bot|uninstall]"; exit 1;;
 esac

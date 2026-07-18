@@ -347,6 +347,22 @@ def run(cmd: list[str], check=False) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, check=check)
 
 
+def _safe_int(value: Any, default: int) -> int:
+    try:
+        return int(str(value).strip())
+    except Exception:
+        return default
+
+
+def _port_list(raw: str, defaults: Iterable[int], allowed: set[int]) -> list[int]:
+    out: list[int] = []
+    for item in str(raw or "").replace(" ", ",").split(","):
+        p = _safe_int(item, 0)
+        if p in allowed and p not in out:
+            out.append(p)
+    return out or [p for p in defaults if p in allowed]
+
+
 def verify_admin_password(password: str) -> bool:
     if not ADMIN_HASH:
         return False
@@ -630,6 +646,14 @@ def system_restart(svc: str, user: str = Depends(require_auth)):
             subprocess.run(["bash", str(setup)], capture_output=True, text=True, check=False)
     subprocess.Popen(["systemctl", "restart", svc])
     log("audit", "system.restart", f"Restart {svc}", actor=user); return {"ok": True}
+
+
+@app.post("/system/repair")
+def system_repair(user: str = Depends(require_auth)):
+    cmd = "nohup /usr/local/bin/autoscript repair-services >> /var/log/autoscript-repair.log 2>&1 &"
+    subprocess.Popen(["bash", "-lc", cmd], start_new_session=True)
+    log("audit", "system.repair", "Service repair queued", actor=user, level="warn")
+    return {"ok": True}
 
 
 # ---- Accounts --------------------------------------------------------------
@@ -1111,8 +1135,10 @@ def bot_payment_create(inp: PaymentBotIn, _: None = Depends(require_internal)):
 # ---- Settings --------------------------------------------------------------
 @app.get("/settings")
 def settings_get(_: str = Depends(require_auth)):
-    tls_ports = [int(p) for p in kv_get("panel.tlsPorts", "443,2053,2083,2087,2096,8443").replace(" ", ",").split(",") if p.strip().isdigit()]
-    plain_ports = [int(p) for p in kv_get("panel.plainPorts", "80,8080,8880,2052,2082,2086,2095").replace(" ", ",").split(",") if p.strip().isdigit()]
+    cf_tls = {443, 2053, 2083, 2087, 2096, 8443}
+    cf_plain = {80, 8080, 8880, 2052, 2082, 2086, 2095}
+    tls_ports = _port_list(kv_get("panel.tlsPorts", "443,2053,2083,2087,2096,8443"), [443,2053,2083,2087,2096,8443], cf_tls)
+    plain_ports = _port_list(kv_get("panel.plainPorts", "80,8080,8880,2052,2082,2086,2095"), [80,8080,8880,2052,2082,2086,2095], cf_plain)
     endpoints: dict[str, dict[str, Any]] = {}
     for proto in ("ssh", "vmess", "vless", "trojan"):
         host = kv_get(f"hosts.{proto}", "")
@@ -1120,13 +1146,14 @@ def settings_get(_: str = Depends(require_auth)):
         ep: dict[str, Any] = {}
         if host:
             ep["host"] = host
-        if port.isdigit():
-            ep["port"] = int(port)
+        parsed_port = _safe_int(port, 0)
+        if 1 <= parsed_port <= 65535:
+            ep["port"] = parsed_port
         endpoints[proto] = ep
     panel_port = kv_get("panel.port", str(PANEL_PORT))
     return {
         "domain": kv_get("panel.domain", PANEL_DOMAIN),
-        "port": int(panel_port) if str(panel_port).isdigit() else PANEL_PORT,
+        "port": _safe_int(panel_port, PANEL_PORT),
         "tlsMode": kv_get("panel.tlsMode", "single"),
         "dnsProvider": kv_get("panel.dnsProvider", ""),
         "rootDomain": kv_get("panel.rootDomain", ""),
@@ -1147,21 +1174,23 @@ def settings_save(inp: SettingsIn, user: str = Depends(require_auth)):
             if k == "domain":
                 update_env_value("PANEL_DOMAIN", str(v).strip())
             elif k == "port":
-                if int(v) < 1 or int(v) > 65535:
+                p = _safe_int(v, 0)
+                if p < 1 or p > 65535:
                     raise HTTPException(400, "Invalid panel port")
-                update_env_value("PANEL_PORT", str(v))
+                update_env_value("PANEL_PORT", str(p))
+                v = p
             elif k == "repoUrl":
                 update_env_value("REPO_URL", str(v).strip())
             kv_set(f"panel.{k}", str(v).strip() if isinstance(v, str) else str(v)); changed[k] = v
     cf_tls = {443, 2053, 2083, 2087, 2096, 8443}
     cf_plain = {80, 8080, 8880, 2052, 2082, 2086, 2095}
     if inp.tlsPorts is not None:
-        ports = sorted({int(p) for p in inp.tlsPorts if int(p) in cf_tls})
+        ports = sorted({p for raw in inp.tlsPorts for p in [_safe_int(raw, 0)] if p in cf_tls})
         if not ports:
             raise HTTPException(400, "At least one TLS port is required")
         kv_set("panel.tlsPorts", ",".join(map(str, ports))); changed["tlsPorts"] = ports
     if inp.plainPorts is not None:
-        ports = sorted({int(p) for p in inp.plainPorts if int(p) in cf_plain})
+        ports = sorted({p for raw in inp.plainPorts for p in [_safe_int(raw, 0)] if p in cf_plain})
         kv_set("panel.plainPorts", ",".join(map(str, ports))); changed["plainPorts"] = ports
     if inp.endpoints is not None:
         for proto in ("ssh", "vmess", "vless", "trojan"):
@@ -1172,7 +1201,7 @@ def settings_save(inp: SettingsIn, user: str = Depends(require_auth)):
             if port in (None, ""):
                 kv_set(f"ports.{proto}", "")
             else:
-                p = int(port)
+                p = _safe_int(port, 0)
                 if p < 1 or p > 65535:
                     raise HTTPException(400, f"Invalid {proto} port")
                 kv_set(f"ports.{proto}", str(p))

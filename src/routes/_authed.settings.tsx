@@ -38,6 +38,10 @@ function SettingsPage() {
     onSuccess: () => { toast.success("Password updated"); setPwd({ current: "", next: "" }); },
   });
   const restart = (svc: string) => api.system.restartService(svc).then(() => toast.success(`${svc} restarted`));
+  const repair = useMutation({
+    mutationFn: () => api.system.repairServices(),
+    onSuccess: () => toast.success("Repair queued. Xray and SSH-WS will be reinstalled/restarted."),
+  });
 
   const togglePort = (list: "tlsPorts" | "plainPorts", port: number) => {
     const cur = new Set(f[list] ?? []);
@@ -197,6 +201,8 @@ function SettingsPage() {
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => toast.success("Renewal queued")}>Renew certificates</Button>
           <Button variant="outline" onClick={() => restart("xray")}>Restart xray</Button>
+          <Button variant="outline" onClick={() => restart("autoscript-ssh-ws")}>Restart SSH-WS</Button>
+          <Button variant="outline" onClick={() => repair.mutate()} disabled={repair.isPending}>Repair VPN services</Button>
           <Button variant="outline" onClick={() => restart("nginx")}>Restart nginx</Button>
           <Button variant="outline" onClick={() => restart("autoscript-agent")}>Restart agent</Button>
           <Button variant="outline" onClick={() => restart("autoscript-bot")}>Restart bot</Button>

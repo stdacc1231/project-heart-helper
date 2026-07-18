@@ -225,6 +225,7 @@ export const api = {
     async version() { return IS_PREVIEW ? mock.version() : req<VersionInfo>("/system/version"); },
     async update() { return IS_PREVIEW ? mock.update() : req<{ ok: true; commit: string }>("/system/update", { method: "POST" }); },
     async restartService(name: string) { return IS_PREVIEW ? mock.restartService(name) : req(`/system/restart/${name}`, { method: "POST" }); },
+    async repairServices() { return IS_PREVIEW ? Promise.resolve({ ok: true as const }) : req<{ ok: true }>("/system/repair", { method: "POST" }); },
     async runSpeedtest() { return IS_PREVIEW ? mock.speedtest() : req<{ downMbps: number; upMbps: number; pingMs: number }>("/system/speedtest", { method: "POST" }); },
     async toggleBbr(on: boolean) { return IS_PREVIEW ? mock.toggleBbr(on) : req("/system/bbr", { method: "POST", body: JSON.stringify({ on }) }); },
   },
