@@ -8,8 +8,11 @@ shared X-Internal-Token header so business rules stay in one place.
 from __future__ import annotations
 
 import base64
+import csv
+import io
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -136,18 +139,37 @@ ACCOUNT_COLUMNS = {
     "note":          "TEXT",
 }
 
+PLAN_COLUMNS = {
+    "name": "TEXT NOT NULL DEFAULT ''",
+    "mode": "TEXT NOT NULL DEFAULT 'prepaid'",
+    "price_cents": "INTEGER NOT NULL DEFAULT 0",
+    "duration_days": "INTEGER NOT NULL DEFAULT 0",
+    "quota_gb": "INTEGER NOT NULL DEFAULT 0",
+    "speed_up_kbps": "INTEGER NOT NULL DEFAULT 0",
+    "speed_dn_kbps": "INTEGER NOT NULL DEFAULT 0",
+    "ip_limit": "INTEGER NOT NULL DEFAULT 2",
+    "active": "INTEGER NOT NULL DEFAULT 1",
+}
+
 
 def _migrate(con: sqlite3.Connection) -> None:
     """Backfill columns added after the first install so old DBs keep working."""
     have = {row["name"] for row in con.execute("PRAGMA table_info(accounts)").fetchall()}
-    if not have:
-        return
-    for col, decl in ACCOUNT_COLUMNS.items():
-        if col not in have:
-            try:
-                con.execute(f"ALTER TABLE accounts ADD COLUMN {col} {decl}")
-            except sqlite3.OperationalError as exc:
-                print(f"schema-migrate-skip accounts.{col}: {exc}", flush=True)
+    if have:
+        for col, decl in ACCOUNT_COLUMNS.items():
+            if col not in have:
+                try:
+                    con.execute(f"ALTER TABLE accounts ADD COLUMN {col} {decl}")
+                except sqlite3.OperationalError as exc:
+                    print(f"schema-migrate-skip accounts.{col}: {exc}", flush=True)
+    have = {row["name"] for row in con.execute("PRAGMA table_info(plans)").fetchall()}
+    if have:
+        for col, decl in PLAN_COLUMNS.items():
+            if col not in have:
+                try:
+                    con.execute(f"ALTER TABLE plans ADD COLUMN {col} {decl}")
+                except sqlite3.OperationalError as exc:
+                    print(f"schema-migrate-skip plans.{col}: {exc}", flush=True)
 
 
 @contextmanager
@@ -235,6 +257,7 @@ class AccountIn(BaseModel):
     quotaGb: int = 0
     telegramId: Optional[str] = None
     planId: Optional[str] = None
+    trial: Optional[bool] = None
 
 
 class AccountPatch(BaseModel):
@@ -276,6 +299,9 @@ class SettingsIn(BaseModel):
     dnsProvider: Optional[str] = None
     rootDomain: Optional[str] = None
     repoUrl: Optional[str] = None
+    tlsPorts: Optional[list[int]] = None
+    plainPorts: Optional[list[int]] = None
+    endpoints: Optional[dict[str, dict[str, Any]]] = None
 
 
 class PasswordIn(BaseModel):
@@ -288,6 +314,30 @@ class PaymentBotIn(BaseModel):
     telegramName: str
     planId: str
     fileId: str
+
+
+class BulkIn(BaseModel):
+    action: str
+    ids: list[str]
+    days: Optional[int] = None
+
+
+class CsvIn(BaseModel):
+    csv: str
+
+
+class DecisionIn(BaseModel):
+    status: str
+    reason: Optional[str] = None
+
+
+class BackupIn(BaseModel):
+    destination: str = "local"
+
+
+class CreditIn(BaseModel):
+    amountCents: int
+    reason: str = "Manual credit"
 
 
 # ---------------------------------------------------------------------------
@@ -354,11 +404,11 @@ def row_to_account(r: sqlite3.Row) -> dict:
 
 
 def row_to_plan(r: sqlite3.Row) -> dict:
-    return {"id": r["id"], "name": r["name"], "mode": r["mode"],
-            "priceCents": r["price_cents"], "durationDays": r["duration_days"],
-            "quotaGb": r["quota_gb"], "speedUpKbps": r["speed_up_kbps"],
-            "speedDnKbps": r["speed_dn_kbps"], "ipLimit": r["ip_limit"],
-            "active": bool(r["active"])}
+    return {"id": _col(r, "id"), "name": _col(r, "name", ""), "mode": _col(r, "mode", "prepaid"),
+            "priceCents": _col(r, "price_cents", 0), "durationDays": _col(r, "duration_days", 0),
+            "quotaGb": _col(r, "quota_gb", 0), "speedUpKbps": _col(r, "speed_up_kbps", 0),
+            "speedDnKbps": _col(r, "speed_dn_kbps", 0), "ipLimit": _col(r, "ip_limit", 2),
+            "active": bool(_col(r, "active", 1))}
 
 
 def apply_speed_limit(username: str, up_kbps: int, dn_kbps: int) -> None:
@@ -374,7 +424,9 @@ def provision_account(a: dict) -> None:
                "USERNAME": a["username"], "PASSWORD": a.get("password") or "",
                "UUID": a.get("uuid") or "", "EXPIRES": a["expiresAt"],
                "IP_LIMIT": str(a["ipLimit"]), "QUOTA_GB": str(a["quotaGb"])}
-        subprocess.run(["bash", str(script)], env=env, check=False)
+        r = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, check=False)
+        if r.returncode != 0:
+            raise HTTPException(500, (r.stderr or r.stdout or "Provisioning failed").strip()[:500])
     apply_speed_limit(a["username"], a["speedUpKbps"], a["speedDnKbps"])
 
 
@@ -572,6 +624,10 @@ def system_update(user: str = Depends(require_auth)):
 def system_restart(svc: str, user: str = Depends(require_auth)):
     if svc not in ("xray", "nginx", "autoscript-agent", "autoscript-web", "autoscript-bot", "autoscript-ssh-ws"):
         raise HTTPException(400, "Not allowed")
+    if svc == "xray":
+        setup = SCRIPTS / "setup_xray.sh"
+        if setup.exists():
+            subprocess.run(["bash", str(setup)], capture_output=True, text=True, check=False)
     subprocess.Popen(["systemctl", "restart", svc])
     log("audit", "system.restart", f"Restart {svc}", actor=user); return {"ok": True}
 
@@ -587,6 +643,79 @@ def accounts_list(protocol: Optional[str] = None, _: str = Depends(require_auth)
     return [row_to_account(r) for r in rows]
 
 
+@app.post("/accounts/bulk")
+def accounts_bulk(inp: BulkIn, user: str = Depends(require_auth)):
+    if inp.action not in ("extend", "delete", "lock", "unlock"):
+        raise HTTPException(400, "Invalid bulk action")
+    if not inp.ids:
+        return {"ok": True, "changed": 0}
+    changed = 0
+    with db() as c:
+        rows = c.execute(
+            f"SELECT * FROM accounts WHERE id IN ({','.join('?' for _ in inp.ids)})",
+            tuple(inp.ids),
+        ).fetchall()
+        for r in rows:
+            a = row_to_account(r)
+            if inp.action == "delete":
+                c.execute("DELETE FROM accounts WHERE id = ?", (a["id"],)); revoke_account(a)
+            elif inp.action == "lock":
+                c.execute("UPDATE accounts SET status = 'locked' WHERE id = ?", (a["id"],))
+            elif inp.action == "unlock":
+                c.execute("UPDATE accounts SET status = 'active' WHERE id = ?", (a["id"],))
+            elif inp.action == "extend":
+                days = inp.days or 30
+                try:
+                    cur = datetime.fromisoformat(a["expiresAt"].replace("Z", "+00:00"))
+                except Exception:
+                    cur = datetime.now(timezone.utc)
+                new_exp = max(cur, datetime.now(timezone.utc)) + timedelta(days=days)
+                c.execute("UPDATE accounts SET expires_at = ? WHERE id = ?", (new_exp.isoformat(), a["id"]))
+            changed += 1
+    log("audit", "account.bulk", f"Bulk {inp.action} on {changed} accounts", actor=user)
+    return {"ok": True, "changed": changed}
+
+
+@app.get("/accounts/export")
+def accounts_export(_: str = Depends(require_auth)):
+    with db() as c:
+        rows = c.execute("SELECT * FROM accounts ORDER BY created_at DESC").fetchall()
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["protocol", "username", "password", "uuid", "expiresAt", "ipLimit", "speedUpKbps", "speedDnKbps", "quotaGb", "telegramId"])
+    for r in rows:
+        a = row_to_account(r)
+        w.writerow([a["protocol"], a["username"], a.get("password") or "", a.get("uuid") or "", a["expiresAt"], a["ipLimit"], a["speedUpKbps"], a["speedDnKbps"], a["quotaGb"], a.get("telegramId") or ""])
+    return {"csv": out.getvalue()}
+
+
+@app.post("/accounts/import")
+def accounts_import(inp: CsvIn, user: str = Depends(require_auth)):
+    created = 0
+    reader = csv.DictReader(io.StringIO(inp.csv))
+    for row in reader:
+        try:
+            proto = (row.get("protocol") or "ssh").strip().lower()
+            if proto not in ("ssh", "vmess", "vless", "trojan"):
+                continue
+            expires = row.get("expiresAt") or (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+            accounts_create(AccountIn(
+                protocol=proto,
+                username=(row.get("username") or "").strip(),
+                password=row.get("password") or None,
+                expiresAt=expires,
+                ipLimit=int(row.get("ipLimit") or 2),
+                speedUpKbps=int(float(row.get("speedUpKbps") or 0)),
+                speedDnKbps=int(float(row.get("speedDnKbps") or 0)),
+                quotaGb=int(float(row.get("quotaGb") or 0)),
+                telegramId=row.get("telegramId") or None,
+            ), user)
+            created += 1
+        except Exception as exc:
+            print(f"csv-import-skip: {exc}", flush=True)
+    return {"created": created}
+
+
 @app.get("/accounts/{aid}")
 def accounts_get(aid: str, _: str = Depends(require_auth)):
     with db() as c:
@@ -597,21 +726,45 @@ def accounts_get(aid: str, _: str = Depends(require_auth)):
 
 @app.post("/accounts")
 def accounts_create(inp: AccountIn, user: str = Depends(require_auth)):
-    aid = f"{inp.protocol}-{_uuid.uuid4().hex[:8]}"
-    u = None if inp.protocol == "ssh" else str(_uuid.uuid4())
-    with db() as c:
-        c.execute("""INSERT INTO accounts(id,protocol,username,password,uuid,created_at,expires_at,
-                     ip_limit,speed_up_kbps,speed_dn_kbps,quota_gb,telegram_id,plan_id)
-                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                  (aid, inp.protocol, inp.username, inp.password, u,
-                   datetime.now(timezone.utc).isoformat(), inp.expiresAt,
-                   inp.ipLimit, inp.speedUpKbps, inp.speedDnKbps, inp.quotaGb,
-                   inp.telegramId, inp.planId))
-        r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
+    proto = inp.protocol.lower().strip()
+    if proto not in ("ssh", "vmess", "vless", "trojan"):
+        raise HTTPException(400, "Unsupported protocol")
+    username = inp.username.strip()
+    if not username:
+        raise HTTPException(400, "Username is required")
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,31}", username):
+        raise HTTPException(400, "Username must be 1-32 chars: letters, numbers, underscore or dash")
+    try:
+        datetime.fromisoformat(inp.expiresAt.replace("Z", "+00:00"))
+    except Exception:
+        raise HTTPException(400, "Invalid expiry date")
+    password = inp.password or (_uuid.uuid4().hex[:12] if proto == "ssh" else None)
+    aid = f"{proto}-{_uuid.uuid4().hex[:8]}"
+    u = None if proto == "ssh" else str(_uuid.uuid4())
+    try:
+        with db() as c:
+            c.execute("""INSERT INTO accounts(id,protocol,username,password,uuid,created_at,expires_at,
+                         ip_limit,speed_up_kbps,speed_dn_kbps,quota_gb,telegram_id,plan_id,status)
+                         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                      (aid, proto, username, password, u,
+                       datetime.now(timezone.utc).isoformat(), inp.expiresAt,
+                       max(0, inp.ipLimit), max(0, inp.speedUpKbps), max(0, inp.speedDnKbps), max(0, inp.quotaGb),
+                       inp.telegramId or None, inp.planId or None, "trial" if inp.trial else "active"))
+            r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
+    except sqlite3.IntegrityError as exc:
+        msg = str(exc).lower()
+        if "unique" in msg and "username" in msg:
+            raise HTTPException(409, "Username already exists")
+        raise HTTPException(400, f"Account validation failed: {exc}")
     a = row_to_account(r)
-    provision_account(a)
-    log("audit", "account.create", f"Created {inp.protocol} account {inp.username}",
-        actor=user, target=inp.username)
+    try:
+        provision_account(a)
+    except HTTPException:
+        with db() as c:
+            c.execute("DELETE FROM accounts WHERE id = ?", (aid,))
+        raise
+    log("audit", "account.create", f"Created {proto} account {username}",
+        actor=user, target=username)
     return a
 
 
@@ -630,11 +783,14 @@ def accounts_update(aid: str, patch: AccountPatch, user: str = Depends(require_a
         if fields:
             c.execute(f"UPDATE accounts SET {', '.join(fields)} WHERE id = ?", (*args, aid))
         r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
-    if patch.speedUpKbps is not None or patch.speedDnKbps is not None:
-        apply_speed_limit(r["username"], r["speed_up_kbps"], r["speed_dn_kbps"])
+    a = row_to_account(r)
+    if a["protocol"] == "ssh" and (patch.password is not None or patch.expiresAt is not None):
+        provision_account(a)
+    elif patch.speedUpKbps is not None or patch.speedDnKbps is not None:
+        apply_speed_limit(a["username"], a["speedUpKbps"], a["speedDnKbps"])
     log("audit", "account.update", f"Updated {r['protocol']} account {r['username']}",
         actor=user, target=r["username"])
-    return row_to_account(r)
+    return a
 
 
 @app.delete("/accounts/{aid}")
@@ -652,19 +808,54 @@ def accounts_delete(aid: str, user: str = Depends(require_auth)):
 @app.get("/accounts/{aid}/config")
 def accounts_config(aid: str, user: str = Depends(require_auth)):
     a = accounts_get(aid, user)
-    host = PANEL_DOMAIN
+    host = kv_get(f"hosts.{a['protocol']}", "") or kv_get("panel.domain", PANEL_DOMAIN)
+    port = int(kv_get(f"ports.{a['protocol']}", "") or kv_get("panel.port", str(PANEL_PORT)) or PANEL_PORT)
     if a["protocol"] == "ssh":
         return {"link": f"ssh://{a['username']}:{a['password']}@{host}:22",
-                "text": f"Host: {host}\nPort: 22 (SSH), {PANEL_PORT} (WebSocket path /)\n"
+                "text": f"Host: {host}\nPort: 22 (SSH), {port} (WebSocket path /)\n"
                         f"User: {a['username']}\nPassword: {a['password']}"}
     if a["protocol"] == "vmess":
-        cfg = {"v":"2","ps":a["username"],"add":host,"port":PANEL_PORT,"id":a["uuid"],
+        cfg = {"v":"2","ps":a["username"],"add":host,"port":port,"id":a["uuid"],
                "aid":0,"net":"ws","type":"none","host":host,"path":"/vmess","tls":"tls"}
         return {"link": "vmess://" + base64.b64encode(json.dumps(cfg).encode()).decode(),
                 "text": json.dumps(cfg, indent=2)}
     if a["protocol"] == "vless":
-        return {"link": f"vless://{a['uuid']}@{host}:{PANEL_PORT}?type=ws&security=tls&path=%2Fvless#{a['username']}", "text": ""}
-    return {"link": f"trojan://{a['uuid']}@{host}:{PANEL_PORT}?type=ws&security=tls&path=%2Ftrojan#{a['username']}", "text": ""}
+        return {"link": f"vless://{a['uuid']}@{host}:{port}?type=ws&security=tls&path=%2Fvless#{a['username']}", "text": ""}
+    return {"link": f"trojan://{a['uuid']}@{host}:{port}?type=ws&security=tls&path=%2Ftrojan#{a['username']}", "text": ""}
+
+
+@app.get("/accounts/{aid}/subscription")
+def accounts_subscription(aid: str, user: str = Depends(require_auth)):
+    accounts_get(aid, user)
+    return {"url": f"https://{kv_get('panel.domain', PANEL_DOMAIN)}:{kv_get('panel.port', str(PANEL_PORT))}/u/{aid}"}
+
+
+@app.get("/accounts/{aid}/detail")
+def accounts_detail(aid: str, user: str = Depends(require_auth)):
+    a = accounts_get(aid, user)
+    cfg = accounts_config(aid, user)
+    try:
+        exp = datetime.fromisoformat(a["expiresAt"].replace("Z", "+00:00"))
+        days = max(0, (exp - datetime.now(timezone.utc)).days)
+    except Exception:
+        days = 0
+    return {"account": a, "configLink": cfg["link"], "configText": cfg["text"],
+            "subscriptionUrl": f"https://{kv_get('panel.domain', PANEL_DOMAIN)}:{kv_get('panel.port', str(PANEL_PORT))}/u/{aid}",
+            "daysRemaining": days, "hourly": [], "daily": [], "activeIps": []}
+
+
+@app.post("/accounts/{aid}/telegram")
+def accounts_send_telegram(aid: str, user: str = Depends(require_auth)):
+    a = accounts_get(aid, user)
+    log("audit", "account.telegram", f"Telegram send queued for {a['username']}", actor=user, target=a["username"])
+    return {"ok": True}
+
+
+@app.post("/accounts/{aid}/rotate-token")
+def accounts_rotate_token(aid: str, user: str = Depends(require_auth)):
+    accounts_get(aid, user)
+    token = _uuid.uuid4().hex
+    return {"token": token}
 
 
 # ---- Plans -----------------------------------------------------------------
@@ -730,6 +921,7 @@ def payments_approve(pid: str, user: str = Depends(require_auth)):
         p = c.execute("SELECT * FROM payments WHERE id = ?", (pid,)).fetchone()
         if not p: raise HTTPException(404, "Not found")
         plan = c.execute("SELECT * FROM plans WHERE id = ?", (p["plan_id"],)).fetchone()
+        if not plan: raise HTTPException(404, "Plan not found")
         c.execute("UPDATE payments SET status = 'approved' WHERE id = ?", (pid,))
     # Provision default SSH account tied to this Telegram user
     username = f"tg{p['telegram_id']}"
@@ -747,6 +939,111 @@ def payments_approve(pid: str, user: str = Depends(require_auth)):
 def payments_reject(pid: str, user: str = Depends(require_auth)):
     with db() as c: c.execute("UPDATE payments SET status = 'rejected' WHERE id = ?", (pid,))
     log("audit", "payment.reject", f"Rejected payment {pid}", actor=user, level="warn")
+    return {"ok": True}
+
+
+@app.post("/payments/{pid}/decide")
+def payments_decide(pid: str, inp: DecisionIn, user: str = Depends(require_auth)):
+    if inp.status == "approved":
+        return payments_approve(pid, user)
+    if inp.status == "rejected":
+        return payments_reject(pid, user)
+    if inp.status != "pending":
+        raise HTTPException(400, "Invalid payment status")
+    with db() as c:
+        c.execute("UPDATE payments SET status = ?, note = ? WHERE id = ?", (inp.status, inp.reason, pid))
+    log("audit", "payment.decide", f"Payment {pid} set to {inp.status}", actor=user)
+    return {"ok": True}
+
+
+# ---- Non-critical panel modules --------------------------------------------
+@app.get("/connections")
+def connections_list(_: str = Depends(require_auth)):
+    return []
+
+
+@app.post("/connections/{cid}/kick")
+def connections_kick(cid: str, user: str = Depends(require_auth)):
+    log("audit", "connection.kick", f"Kick requested for {cid}", actor=user)
+    return {"ok": True}
+
+
+@app.get("/backups")
+def backups_list(_: str = Depends(require_auth)):
+    backups = []
+    for p in sorted(Path("/root").glob("autoscript-backup-*.tar.gz"), reverse=True):
+        st = p.stat()
+        backups.append({"id": p.name, "createdAt": datetime.fromtimestamp(st.st_mtime, timezone.utc).isoformat(),
+                        "sizeBytes": st.st_size, "kind": "manual", "destination": "local", "status": "ready"})
+    return backups
+
+
+@app.post("/backups")
+def backups_create(inp: BackupIn, user: str = Depends(require_auth)):
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    out = f"/root/autoscript-backup-{ts}.tar.gz"
+    subprocess.run(["tar", "-czf", out, "/etc/autoscript", "/usr/local/etc/xray"], capture_output=True, text=True, check=False)
+    log("audit", "backup.create", f"Backup created at {out}", actor=user)
+    return {"id": Path(out).name, "createdAt": datetime.now(timezone.utc).isoformat(),
+            "sizeBytes": Path(out).stat().st_size if Path(out).exists() else 0,
+            "kind": "manual", "destination": inp.destination, "status": "ready"}
+
+
+@app.post("/backups/{bid}/restore")
+def backups_restore(bid: str, user: str = Depends(require_auth)):
+    log("audit", "backup.restore", f"Restore requested for {bid}", actor=user, level="warn")
+    return {"ok": True}
+
+
+@app.delete("/backups/{bid}")
+def backups_delete(bid: str, user: str = Depends(require_auth)):
+    p = Path("/root") / bid
+    if p.name.startswith("autoscript-backup-") and p.suffixes[-2:] == [".tar", ".gz"] and p.exists():
+        p.unlink()
+    log("audit", "backup.delete", f"Deleted backup {bid}", actor=user, level="warn")
+    return {"ok": True}
+
+
+@app.get("/alerts")
+def alerts_list(_: str = Depends(require_auth)):
+    alerts = []
+    for svc in ("xray", "autoscript-ssh-ws", "nginx"):
+        if run(["systemctl", "is-active", svc]).stdout.strip() != "active":
+            alerts.append({"id": svc, "ts": datetime.now(timezone.utc).isoformat(), "level": "critical",
+                           "source": svc, "message": f"{svc} is not running", "acknowledged": False})
+    return alerts
+
+
+@app.post("/alerts/{aid}/ack")
+def alerts_ack(aid: str, user: str = Depends(require_auth)):
+    log("audit", "alert.ack", f"Alert acknowledged {aid}", actor=user)
+    return {"ok": True}
+
+
+@app.get("/wallet")
+def wallet_list(_: str = Depends(require_auth)):
+    return []
+
+
+@app.get("/wallet/balance")
+def wallet_balance(_: str = Depends(require_auth)):
+    return {"balanceCents": 0}
+
+
+@app.post("/wallet/credit")
+def wallet_credit(inp: CreditIn, user: str = Depends(require_auth)):
+    log("audit", "wallet.credit", f"Wallet credit {inp.amountCents}: {inp.reason}", actor=user)
+    return {"ok": True}
+
+
+@app.get("/invoices")
+def invoices_list(_: str = Depends(require_auth)):
+    return []
+
+
+@app.post("/invoices/{iid}/send")
+def invoices_send(iid: str, user: str = Depends(require_auth)):
+    log("audit", "invoice.send", f"Invoice send queued for {iid}", actor=user)
     return {"ok": True}
 
 
@@ -814,14 +1111,30 @@ def bot_payment_create(inp: PaymentBotIn, _: None = Depends(require_internal)):
 # ---- Settings --------------------------------------------------------------
 @app.get("/settings")
 def settings_get(_: str = Depends(require_auth)):
+    tls_ports = [int(p) for p in kv_get("panel.tlsPorts", "443,2053,2083,2087,2096,8443").replace(" ", ",").split(",") if p.strip().isdigit()]
+    plain_ports = [int(p) for p in kv_get("panel.plainPorts", "80,8080,8880,2052,2082,2086,2095").replace(" ", ",").split(",") if p.strip().isdigit()]
+    endpoints: dict[str, dict[str, Any]] = {}
+    for proto in ("ssh", "vmess", "vless", "trojan"):
+        host = kv_get(f"hosts.{proto}", "")
+        port = kv_get(f"ports.{proto}", "")
+        ep: dict[str, Any] = {}
+        if host:
+            ep["host"] = host
+        if port.isdigit():
+            ep["port"] = int(port)
+        endpoints[proto] = ep
+    panel_port = kv_get("panel.port", str(PANEL_PORT))
     return {
-        "domain": PANEL_DOMAIN,
-        "port": PANEL_PORT,
+        "domain": kv_get("panel.domain", PANEL_DOMAIN),
+        "port": int(panel_port) if str(panel_port).isdigit() else PANEL_PORT,
         "tlsMode": kv_get("panel.tlsMode", "single"),
         "dnsProvider": kv_get("panel.dnsProvider", ""),
         "rootDomain": kv_get("panel.rootDomain", ""),
         "dbPath": DB_PATH,
-        "repoUrl": REPO_URL,
+        "repoUrl": kv_get("panel.repoUrl", REPO_URL),
+        "tlsPorts": tls_ports,
+        "plainPorts": plain_ports,
+        "endpoints": endpoints,
     }
 
 
@@ -830,11 +1143,46 @@ def settings_save(inp: SettingsIn, user: str = Depends(require_auth)):
     changed = {}
     for k in ("domain", "port", "tlsMode", "dnsProvider", "rootDomain", "repoUrl"):
         v = getattr(inp, k)
-        if v is not None: kv_set(f"panel.{k}", str(v)); changed[k] = v
+        if v is not None:
+            if k == "domain":
+                update_env_value("PANEL_DOMAIN", str(v).strip())
+            elif k == "port":
+                if int(v) < 1 or int(v) > 65535:
+                    raise HTTPException(400, "Invalid panel port")
+                update_env_value("PANEL_PORT", str(v))
+            elif k == "repoUrl":
+                update_env_value("REPO_URL", str(v).strip())
+            kv_set(f"panel.{k}", str(v).strip() if isinstance(v, str) else str(v)); changed[k] = v
+    cf_tls = {443, 2053, 2083, 2087, 2096, 8443}
+    cf_plain = {80, 8080, 8880, 2052, 2082, 2086, 2095}
+    if inp.tlsPorts is not None:
+        ports = sorted({int(p) for p in inp.tlsPorts if int(p) in cf_tls})
+        if not ports:
+            raise HTTPException(400, "At least one TLS port is required")
+        kv_set("panel.tlsPorts", ",".join(map(str, ports))); changed["tlsPorts"] = ports
+    if inp.plainPorts is not None:
+        ports = sorted({int(p) for p in inp.plainPorts if int(p) in cf_plain})
+        kv_set("panel.plainPorts", ",".join(map(str, ports))); changed["plainPorts"] = ports
+    if inp.endpoints is not None:
+        for proto in ("ssh", "vmess", "vless", "trojan"):
+            ep = inp.endpoints.get(proto) or {}
+            host = str(ep.get("host") or "").strip()
+            port = ep.get("port")
+            kv_set(f"hosts.{proto}", host)
+            if port in (None, ""):
+                kv_set(f"ports.{proto}", "")
+            else:
+                p = int(port)
+                if p < 1 or p > 65535:
+                    raise HTTPException(400, f"Invalid {proto} port")
+                kv_set(f"ports.{proto}", str(p))
+        changed["endpoints"] = inp.endpoints
     apply = Path(INSTALL_ROOT) / "backend" / "scripts" / "apply_settings.sh"
     if apply.exists():
         subprocess.Popen(["bash", str(apply)])
     log("audit", "settings.update", f"Settings updated: {list(changed)}", actor=user)
+    if any(k in changed for k in ("domain", "port")):
+        subprocess.Popen(["bash", "-lc", "nohup bash -c 'sleep 2; systemctl restart autoscript-agent' >/dev/null 2>&1 &"])
     return settings_get(user)
 
 

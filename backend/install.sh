@@ -123,7 +123,7 @@ apt-get update -y
 apt-get install -y --no-install-recommends \
   git curl wget ca-certificates jq socat cron sqlite3 \
   python3 python3-venv python3-pip \
-  nginx iproute2 iptables uuid-runtime openssl \
+  nginx openssh-server iproute2 iptables uuid-runtime openssl \
   fail2ban ufw unzip build-essential
 
 # Node 22+ is required by the current web UI toolchain.
@@ -137,6 +137,8 @@ apt-get purge -y cloudflare-warp cloudflared 2>/dev/null || true
 rm -rf /etc/cloudflared /var/lib/cloudflared /etc/apt/sources.list.d/cloudflare* \
        /usr/local/bin/cloudflared 2>/dev/null || true
 ok "Cloudflare components removed."
+
+systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true
 
 # --------------------------------------------------------------------------
 say "Fetching Autoscript repo"

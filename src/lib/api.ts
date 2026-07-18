@@ -271,7 +271,7 @@ export const api = {
   },
   plans: {
     async list() { return IS_PREVIEW ? mock.listPlans() : req<Plan[]>("/plans"); },
-    async save(p: Partial<Plan>) { return IS_PREVIEW ? mock.savePlan(p) : req<Plan>("/plans", { method: p.id ? "PATCH" : "POST", body: JSON.stringify(p) }); },
+    async save(p: Partial<Plan>) { return IS_PREVIEW ? mock.savePlan(p) : req<Plan>(p.id ? `/plans/${p.id}` : "/plans", { method: p.id ? "PATCH" : "POST", body: JSON.stringify(p) }); },
     async remove(id: string) { return IS_PREVIEW ? mock.removePlan(id) : req(`/plans/${id}`, { method: "DELETE" }); },
   },
   payments: {

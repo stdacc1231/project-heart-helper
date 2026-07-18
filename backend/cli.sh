@@ -219,7 +219,13 @@ update_now() {
   say "Rebuilding web UI"
   ensure_node22
   build_web_ui || warn "Web rebuild failed"
+  chmod +x "$INSTALL_ROOT/backend/scripts/"*.sh 2>/dev/null || true
+  if [[ -x "$INSTALL_ROOT/backend/scripts/setup_xray.sh" ]]; then
+    bash "$INSTALL_ROOT/backend/scripts/setup_xray.sh" || warn "xray setup failed"
+  fi
   restart_stack
+  systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true
+  systemctl enable --now xray autoscript-ssh-ws 2>/dev/null || true
   ok "Updated to latest main."
 }
 
