@@ -12,6 +12,7 @@ import csv
 import io
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -731,6 +732,8 @@ def accounts_create(inp: AccountIn, user: str = Depends(require_auth)):
     username = inp.username.strip()
     if not username:
         raise HTTPException(400, "Username is required")
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,31}", username):
+        raise HTTPException(400, "Username must be 1-32 chars: letters, numbers, underscore or dash")
     try:
         datetime.fromisoformat(inp.expiresAt.replace("Z", "+00:00"))
     except Exception:
@@ -918,6 +921,7 @@ def payments_approve(pid: str, user: str = Depends(require_auth)):
         p = c.execute("SELECT * FROM payments WHERE id = ?", (pid,)).fetchone()
         if not p: raise HTTPException(404, "Not found")
         plan = c.execute("SELECT * FROM plans WHERE id = ?", (p["plan_id"],)).fetchone()
+        if not plan: raise HTTPException(404, "Plan not found")
         c.execute("UPDATE payments SET status = 'approved' WHERE id = ?", (pid,))
     # Provision default SSH account tied to this Telegram user
     username = f"tg{p['telegram_id']}"
