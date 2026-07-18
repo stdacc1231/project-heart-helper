@@ -44,10 +44,6 @@ function AccountsPage() {
       api.accounts.bulk(action, Object.keys(selected).filter((k) => selected[k]), days),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["accounts"] }); setSelected({}); toast.success("Bulk action applied"); },
   });
-  const importCsv = useMutation({
-    mutationFn: (csv: string) => api.accounts.importCsv(csv),
-    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ["accounts"] }); toast.success(`Imported ${r.created} accounts`); },
-  });
 
   const filtered = useMemo(() => (data ?? []).filter((a) =>
     a.username.toLowerCase().includes(q.toLowerCase()) ||
