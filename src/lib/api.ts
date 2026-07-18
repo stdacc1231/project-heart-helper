@@ -216,7 +216,7 @@ export const api = {
     async traffic(range: "1h" | "24h" | "7d" = "24h") { return IS_PREVIEW ? mock.traffic(range) : req<TrafficPoint[]>(`/system/traffic?range=${range}`); },
     async version() { return IS_PREVIEW ? mock.version() : req<VersionInfo>("/system/version"); },
     async update() { return IS_PREVIEW ? mock.update() : req<{ ok: true; commit: string }>("/system/update", { method: "POST" }); },
-    async restartService(name: string) { return IS_PREVIEW ? mock.restartService(name) : req(`/system/services/${name}/restart`, { method: "POST" }); },
+    async restartService(name: string) { return IS_PREVIEW ? mock.restartService(name) : req(`/system/restart/${name}`, { method: "POST" }); },
     async runSpeedtest() { return IS_PREVIEW ? mock.speedtest() : req<{ downMbps: number; upMbps: number; pingMs: number }>("/system/speedtest", { method: "POST" }); },
     async toggleBbr(on: boolean) { return IS_PREVIEW ? mock.toggleBbr(on) : req("/system/bbr", { method: "POST", body: JSON.stringify({ on }) }); },
   },
