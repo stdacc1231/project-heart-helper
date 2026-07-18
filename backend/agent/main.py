@@ -118,6 +118,38 @@ CREATE INDEX IF NOT EXISTS idx_traffic_ts ON traffic_samples(ts);
 """
 
 
+ACCOUNT_COLUMNS = {
+    "protocol":      "TEXT NOT NULL DEFAULT 'ssh'",
+    "username":      "TEXT NOT NULL DEFAULT ''",
+    "password":      "TEXT",
+    "uuid":          "TEXT",
+    "created_at":    "TEXT NOT NULL DEFAULT ''",
+    "expires_at":    "TEXT NOT NULL DEFAULT ''",
+    "ip_limit":      "INTEGER NOT NULL DEFAULT 2",
+    "speed_up_kbps": "INTEGER NOT NULL DEFAULT 0",
+    "speed_dn_kbps": "INTEGER NOT NULL DEFAULT 0",
+    "quota_gb":      "INTEGER NOT NULL DEFAULT 0",
+    "used_bytes":    "INTEGER NOT NULL DEFAULT 0",
+    "status":        "TEXT NOT NULL DEFAULT 'active'",
+    "telegram_id":   "TEXT",
+    "plan_id":       "TEXT",
+    "note":          "TEXT",
+}
+
+
+def _migrate(con: sqlite3.Connection) -> None:
+    """Backfill columns added after the first install so old DBs keep working."""
+    have = {row["name"] for row in con.execute("PRAGMA table_info(accounts)").fetchall()}
+    if not have:
+        return
+    for col, decl in ACCOUNT_COLUMNS.items():
+        if col not in have:
+            try:
+                con.execute(f"ALTER TABLE accounts ADD COLUMN {col} {decl}")
+            except sqlite3.OperationalError as exc:
+                print(f"schema-migrate-skip accounts.{col}: {exc}", flush=True)
+
+
 @contextmanager
 def db():
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
@@ -125,10 +157,12 @@ def db():
     con.row_factory = sqlite3.Row
     try:
         con.executescript(SCHEMA)
+        _migrate(con)
         yield con
         con.commit()
     finally:
         con.close()
+
 
 
 def kv_get(key: str, default: str = "") -> str:
