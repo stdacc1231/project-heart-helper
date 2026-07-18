@@ -74,6 +74,7 @@ ensure_node22() {
 }
 build_web_ui() {
   cd "$INSTALL_ROOT" || die "Install dir missing."
+  export NITRO_PRESET=node-server
   if command -v bun >/dev/null 2>&1 && [[ -f bun.lock || -f bun.lockb ]]; then
     bun install --production=false && bun run build
   else
@@ -84,17 +85,14 @@ build_web_ui() {
     fi
     npm run build
   fi
-  local src=""
-  for cand in dist .output/public build out; do
-    if [[ -f "$INSTALL_ROOT/$cand/index.html" ]]; then src="$INSTALL_ROOT/$cand"; break; fi
-  done
-  [[ -n "$src" ]] || { warn "No index.html in dist/.output/public/build/out"; return 1; }
-  if [[ "$src" != "$INSTALL_ROOT/dist" ]]; then
-    rm -rf "$INSTALL_ROOT/dist"
-    cp -a "$src" "$INSTALL_ROOT/dist"
+  if [[ -f "$INSTALL_ROOT/.output/server/index.mjs" ]]; then
+    ok "Web server bundle at $INSTALL_ROOT/.output/server/index.mjs"
+    return 0
   fi
-  ok "SPA staged at $INSTALL_ROOT/dist"
+  warn "Node server bundle not found at .output/server/index.mjs"
+  return 1
 }
+
 
 # ---------- actions ----------
 show_status() {
