@@ -23,6 +23,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
+from urllib.parse import quote
 
 import psutil
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
@@ -427,6 +428,100 @@ def ssh_login_username(username: str) -> str:
         return raw
     digest = hashlib.sha256(base.encode()).hexdigest()[:8]
     return f"grvpn-{base[:17]}-{digest}"
+
+
+CF_TLS_PORTS = {443, 2053, 2083, 2087, 2096, 8443}
+CF_PLAIN_PORTS = {80, 8080, 8880, 2052, 2082, 2086, 2095}
+
+
+def _tls_ports() -> list[int]:
+    return _port_list(kv_get("panel.tlsPorts", "443,2053,2083,2087,2096,8443"), [443, 2053, 2083, 2087, 2096, 8443], CF_TLS_PORTS)
+
+
+def _plain_ports() -> list[int]:
+    return _port_list(kv_get("panel.plainPorts", "80,8080,8880,2052,2082,2086,2095"), [80, 8080, 8880, 2052, 2082, 2086, 2095], CF_PLAIN_PORTS)
+
+
+def _proto_host(proto: str) -> str:
+    return kv_get(f"hosts.{proto}", "") or kv_get("panel.domain", PANEL_DOMAIN)
+
+
+def _panel_public_url(path: str) -> str:
+    domain = kv_get("panel.domain", PANEL_DOMAIN)
+    port = _safe_int(kv_get("panel.port", str(PANEL_PORT)), PANEL_PORT)
+    suffix = "" if port == 443 else f":{port}"
+    return f"https://{domain}{suffix}{path}"
+
+
+def _vmess_link(username: str, host: str, port: int, uid: str, *, tls: bool) -> str:
+    cfg = {
+        "v": "2", "ps": f"{username}-{'tls' if tls else 'plain'}", "add": host,
+        "port": port, "id": uid, "aid": 0, "net": "ws", "type": "none",
+        "host": host, "path": "/vmess", "tls": "tls" if tls else "",
+    }
+    return "vmess://" + base64.b64encode(json.dumps(cfg, separators=(",", ":")).encode()).decode()
+
+
+def _xray_uri(proto: str, username: str, host: str, port: int, uid: str, *, tls: bool) -> str:
+    path = f"/{proto}"
+    security = "tls" if tls else "none"
+    suffix = quote(username, safe="")
+    if proto == "vless":
+        return f"vless://{uid}@{host}:{port}?type=ws&security={security}&host={quote(host)}&path={quote(path, safe='')}#{suffix}"
+    return f"trojan://{uid}@{host}:{port}?type=ws&security={security}&host={quote(host)}&path={quote(path, safe='')}#{suffix}"
+
+
+def connection_profiles(a: dict) -> list[dict[str, Any]]:
+    host = _proto_host(a["protocol"])
+    tls_ports = _tls_ports()
+    plain_ports = _plain_ports()
+    out: list[dict[str, Any]] = []
+    if a["protocol"] == "ssh":
+        login_user = ssh_login_username(a["username"])
+        out.append({
+            "label": "SSH direct", "network": "tcp", "security": "none", "host": host,
+            "port": 22, "path": "", "username": login_user, "password": a.get("password") or "",
+            "link": f"ssh://{quote(login_user)}:{quote(a.get('password') or '')}@{host}:22",
+            "text": f"Host: {host}\nPort: 22\nUsername: {login_user}\nPassword: {a.get('password') or ''}",
+        })
+        for p in tls_ports:
+            out.append({
+                "label": f"SSH WebSocket TLS :{p}", "network": "ws", "security": "tls", "host": host,
+                "port": p, "path": "/", "username": login_user, "password": a.get("password") or "",
+                "link": f"ssh-ws://{quote(login_user)}:{quote(a.get('password') or '')}@{host}:{p}/?security=tls",
+                "text": f"Host/SNI: {host}\nPort: {p}\nTLS: on\nWebSocket path: /\nUsername: {login_user}\nPassword: {a.get('password') or ''}",
+            })
+        for p in plain_ports:
+            out.append({
+                "label": f"SSH WebSocket plain :{p}", "network": "ws", "security": "none", "host": host,
+                "port": p, "path": "/", "username": login_user, "password": a.get("password") or "",
+                "link": f"ssh-ws://{quote(login_user)}:{quote(a.get('password') or '')}@{host}:{p}/?security=none",
+                "text": f"Host: {host}\nPort: {p}\nTLS: off\nWebSocket path: /\nUsername: {login_user}\nPassword: {a.get('password') or ''}",
+            })
+        return out
+    uid = a.get("uuid") or ""
+    path = f"/{a['protocol']}"
+    for p in tls_ports:
+        link = _vmess_link(a["username"], host, p, uid, tls=True) if a["protocol"] == "vmess" else _xray_uri(a["protocol"], a["username"], host, p, uid, tls=True)
+        out.append({"label": f"{a['protocol'].upper()} WS TLS :{p}", "network": "ws", "security": "tls", "host": host, "port": p, "path": path, "link": link, "text": link})
+    for p in plain_ports:
+        link = _vmess_link(a["username"], host, p, uid, tls=False) if a["protocol"] == "vmess" else _xray_uri(a["protocol"], a["username"], host, p, uid, tls=False)
+        out.append({"label": f"{a['protocol'].upper()} WS plain :{p}", "network": "ws", "security": "none", "host": host, "port": p, "path": path, "link": link, "text": link})
+    return out
+
+
+def active_ips_for_account(a: dict) -> list[dict[str, str]]:
+    if a["protocol"] != "ssh":
+        return []
+    user = ssh_login_username(a["username"])
+    try:
+        r = run(["bash", "-lc", "ss -tnp 2>/dev/null | awk '/sshd/ {print $5}' | sed 's/::ffff://' | sed 's/:.*//' | sort -u"])
+        ips = [x.strip() for x in r.stdout.splitlines() if x.strip() and x.strip() not in {"127.0.0.1", "0.0.0.0"}]
+        if run(["id", "-u", user]).returncode != 0:
+            return []
+        return [{"ip": ip, "country": "", "lastSeen": datetime.now(timezone.utc).isoformat()} for ip in ips]
+    except Exception:
+        return []
 
 
 
@@ -866,27 +961,14 @@ def accounts_delete(aid: str, user: str = Depends(require_auth)):
 @app.get("/accounts/{aid}/config")
 def accounts_config(aid: str, user: str = Depends(require_auth)):
     a = accounts_get(aid, user)
-    host = kv_get(f"hosts.{a['protocol']}", "") or kv_get("panel.domain", PANEL_DOMAIN)
-    port = int(kv_get(f"ports.{a['protocol']}", "") or "443")
-    if a["protocol"] == "ssh":
-        login_user = ssh_login_username(a["username"])
-        return {"link": f"ssh://{login_user}:{a['password']}@{host}:22",
-                "text": f"Host: {host}\nPort: 22 (SSH), {port} (WebSocket path /)\n"
-                        f"User: {login_user}\nPanel user: {a['username']}\nPassword: {a['password']}"}
-    if a["protocol"] == "vmess":
-        cfg = {"v":"2","ps":a["username"],"add":host,"port":port,"id":a["uuid"],
-               "aid":0,"net":"ws","type":"none","host":host,"path":"/vmess","tls":"tls"}
-        return {"link": "vmess://" + base64.b64encode(json.dumps(cfg).encode()).decode(),
-                "text": json.dumps(cfg, indent=2)}
-    if a["protocol"] == "vless":
-        return {"link": f"vless://{a['uuid']}@{host}:{port}?type=ws&security=tls&path=%2Fvless#{a['username']}", "text": ""}
-    return {"link": f"trojan://{a['uuid']}@{host}:{port}?type=ws&security=tls&path=%2Ftrojan#{a['username']}", "text": ""}
+    cfg = accounts_config_public(a)
+    return cfg
 
 
 @app.get("/accounts/{aid}/subscription")
 def accounts_subscription(aid: str, user: str = Depends(require_auth)):
     accounts_get(aid, user)
-    return {"url": f"https://{kv_get('panel.domain', PANEL_DOMAIN)}:{kv_get('panel.port', str(PANEL_PORT))}/u/{aid}"}
+    return {"url": _panel_public_url(f"/u/{aid}")}
 
 
 @app.get("/accounts/{aid}/detail")
@@ -906,32 +988,29 @@ def account_detail_payload(aid: str):
         raise HTTPException(404, "Not found")
     a = row_to_account(r)
     cfg = accounts_config_public(a)
+    ips = active_ips_for_account(a)
+    a["online"] = len(ips)
     try:
         exp = datetime.fromisoformat(a["expiresAt"].replace("Z", "+00:00"))
         days = max(0, (exp - datetime.now(timezone.utc)).days)
     except Exception:
         days = 0
+    limit_bytes = max(0, int(a.get("quotaGb") or 0)) * 1024 ** 3
+    used = max(0, int(a.get("usedBytes") or 0))
     return {"account": a, "configLink": cfg["link"], "configText": cfg["text"],
-            "subscriptionUrl": f"https://{kv_get('panel.domain', PANEL_DOMAIN)}:{kv_get('panel.port', str(PANEL_PORT))}/u/{aid}",
-            "daysRemaining": days, "hourly": [], "daily": [], "activeIps": []}
+            "subscriptionUrl": _panel_public_url(f"/u/{aid}"),
+            "daysRemaining": days, "hourly": [], "daily": [], "activeIps": ips,
+            "loginUsername": ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"],
+            "host": _proto_host(a["protocol"]), "tlsPorts": _tls_ports(), "plainPorts": _plain_ports(),
+            "connectionProfiles": cfg.get("profiles", []),
+            "usage": {"totalBytes": used, "limitBytes": limit_bytes, "remainingBytes": max(0, limit_bytes - used) if limit_bytes else 0}}
 
 
 def accounts_config_public(a: dict) -> dict:
-    host = kv_get(f"hosts.{a['protocol']}", "") or kv_get("panel.domain", PANEL_DOMAIN)
-    port = int(kv_get(f"ports.{a['protocol']}", "") or "443")
-    if a["protocol"] == "ssh":
-        login_user = ssh_login_username(a["username"])
-        return {"link": f"ssh://{login_user}:{a['password']}@{host}:22",
-                "text": f"Host: {host}\nPort: 22 (SSH), {port} (WebSocket path /)\n"
-                        f"User: {login_user}\nPanel user: {a['username']}\nPassword: {a['password']}"}
-    if a["protocol"] == "vmess":
-        cfg = {"v":"2","ps":a["username"],"add":host,"port":port,"id":a["uuid"],
-               "aid":0,"net":"ws","type":"none","host":host,"path":"/vmess","tls":"tls"}
-        return {"link": "vmess://" + base64.b64encode(json.dumps(cfg).encode()).decode(),
-                "text": json.dumps(cfg, indent=2)}
-    if a["protocol"] == "vless":
-        return {"link": f"vless://{a['uuid']}@{host}:{port}?type=ws&security=tls&path=%2Fvless#{a['username']}", "text": ""}
-    return {"link": f"trojan://{a['uuid']}@{host}:{port}?type=ws&security=tls&path=%2Ftrojan#{a['username']}", "text": ""}
+    profiles = connection_profiles(a)
+    primary = profiles[1] if a["protocol"] == "ssh" and len(profiles) > 1 else (profiles[0] if profiles else {"link": "", "text": ""})
+    summary = [p.get("text") or p.get("link", "") for p in profiles[:8]]
+    return {"link": primary.get("link", ""), "text": "\n\n---\n\n".join(summary), "profiles": profiles}
 
 
 @app.post("/accounts/{aid}/telegram")
