@@ -40,8 +40,6 @@ export interface Account {
   nodeId?: string;
 }
 
-export interface Plan {
-  id: string; name: string;
 export type PlanMode = "prepaid" | "payg_gb" | "payg_day";
 
 export interface Plan {
