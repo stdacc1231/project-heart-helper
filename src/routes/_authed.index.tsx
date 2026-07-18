@@ -1,0 +1,109 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { Activity, Cpu, HardDrive, MemoryStick, Wifi, Users, CheckCircle2, XCircle } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { api, formatDuration, formatBytes } from "@/lib/api";
+
+export const Route = createFileRoute("/_authed/")({
+  head: () => ({ meta: [{ title: "Dashboard — Autoscript Panel" }] }),
+  component: DashboardPage,
+});
+
+function Stat({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-muted-foreground">{label}</span>
+        <Icon className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <div className="mt-2 text-2xl font-semibold">{value}</div>
+      {sub && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
+    </Card>
+  );
+}
+
+function DashboardPage() {
+  const { data: s } = useQuery({ queryKey: ["status"], queryFn: () => api.system.status(), refetchInterval: 5000 });
+  const { data: accounts } = useQuery({ queryKey: ["accounts"], queryFn: () => api.accounts.list() });
+
+  const online = accounts?.reduce((a, x) => a + x.online, 0) ?? 0;
+  const totalUsage = accounts?.reduce((a, x) => a + x.usedBytes, 0) ?? 0;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat icon={Activity} label="Uptime" value={s ? formatDuration(s.uptimeSeconds) : "—"} sub={s?.hostname} />
+        <Stat icon={Users} label="Users online" value={String(online)} sub={`${accounts?.length ?? 0} total`} />
+        <Stat icon={Wifi} label="Network" value={s ? `${s.netRxMbps.toFixed(1)} / ${s.netTxMbps.toFixed(1)} Mbps` : "—"} sub="Rx / Tx" />
+        <Stat icon={HardDrive} label="Traffic" value={formatBytes(totalUsage)} sub="This period" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card className="p-4">
+          <h3 className="mb-4 text-sm font-medium">Resources</h3>
+          <div className="space-y-4">
+            <ResourceRow icon={Cpu} label="CPU" percent={s?.cpuPercent ?? 0} sub={`${(s?.cpuPercent ?? 0).toFixed(1)}%`} />
+            <ResourceRow icon={MemoryStick} label="Memory" percent={s?.memoryPercent ?? 0} sub={`${s?.memoryUsedMb ?? 0} / ${s?.memoryTotalMb ?? 0} MB`} />
+            <ResourceRow icon={HardDrive} label="Disk" percent={s?.diskPercent ?? 0} sub={`${s?.diskUsedGb ?? 0} / ${s?.diskTotalGb ?? 0} GB`} />
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <h3 className="mb-4 text-sm font-medium">Services</h3>
+          <div className="space-y-2">
+            {s?.services.map((svc) => (
+              <div key={svc.name} className="flex items-center justify-between rounded-md border px-3 py-2">
+                <div className="flex items-center gap-2">
+                  {svc.running ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  ) : (
+                    <XCircle className="h-4 w-4 text-destructive" />
+                  )}
+                  <span className="font-mono text-sm">{svc.name}</span>
+                </div>
+                <Badge variant={svc.running ? "secondary" : "destructive"}>
+                  {svc.running ? "running" : "stopped"}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      <Card className="p-4">
+        <h3 className="mb-3 text-sm font-medium">System</h3>
+        <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+          <Field label="Hostname" value={s?.hostname} />
+          <Field label="OS" value={s?.os} />
+          <Field label="Kernel" value={s?.kernel} />
+          <Field label="IPv4" value={s?.ipv4} />
+        </dl>
+      </Card>
+    </div>
+  );
+}
+
+function ResourceRow({ icon: Icon, label, percent, sub }: { icon: any; label: string; percent: number; sub: string }) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between text-sm">
+        <span className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          {label}
+        </span>
+        <span className="text-muted-foreground">{sub}</span>
+      </div>
+      <Progress value={percent} />
+    </div>
+  );
+}
+function Field({ label, value }: { label: string; value?: string }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="font-mono">{value ?? "—"}</dd>
+    </div>
+  );
+}
