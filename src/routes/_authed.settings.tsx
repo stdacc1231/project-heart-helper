@@ -48,7 +48,7 @@ function SettingsPage() {
     if (cur.has(port)) cur.delete(port); else cur.add(port);
     setF({ ...f, [list]: [...cur].sort((a, b) => a - b) });
   };
-  const setEndpoint = (p: Protocol, patch: { host?: string; port?: number }) => {
+  const setEndpoint = (p: Protocol, patch: { host?: string }) => {
     const eps = { ...(f.endpoints ?? {}) };
     eps[p] = { ...(eps[p] ?? {}), ...patch };
     setF({ ...f, endpoints: eps });
@@ -149,17 +149,16 @@ function SettingsPage() {
         <div>
           <h3 className="text-sm font-medium">Protocol endpoints</h3>
           <p className="text-xs text-muted-foreground">
-            Leave blank to use the panel main domain and default port. Any host you set here is auto-added to the TLS cert on save.
+            Leave blank to use the panel main domain. Any host you set here is auto-added to the TLS cert on save.
           </p>
         </div>
         <div className="grid gap-2">
           {PROTOS.map((p) => {
             const ep = f.endpoints?.[p] ?? {};
             return (
-              <div key={p} className="grid grid-cols-[130px_1fr_120px] items-center gap-2">
+              <div key={p} className="grid grid-cols-[130px_1fr] items-center gap-2">
                 <div className="mono text-xs uppercase text-muted-foreground">{PROTOCOL_LABELS[p]}</div>
                 <Input placeholder={f.domain ?? "panel domain"} value={ep.host ?? ""} onChange={(e) => setEndpoint(p, { host: e.target.value })} />
-                <Input placeholder="port" type="number" value={ep.port ?? ""} onChange={(e) => setEndpoint(p, { port: e.target.value ? +e.target.value : undefined })} />
               </div>
             );
           })}

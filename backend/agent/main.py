@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import csv
+import hashlib
 import io
 import json
 import os
@@ -418,6 +419,16 @@ def row_to_account(r: sqlite3.Row) -> dict:
     }
 
 
+def ssh_login_username(username: str) -> str:
+    """Linux login used for SSH accounts. Panel usernames stay clean/simple."""
+    base = re.sub(r"[^A-Za-z0-9_-]", "-", username.strip()) or "user"
+    raw = f"grvpn-{base}"
+    if len(raw) <= 32:
+        return raw
+    digest = hashlib.sha256(base.encode()).hexdigest()[:8]
+    return f"grvpn-{base[:17]}-{digest}"
+
+
 
 def row_to_plan(r: sqlite3.Row) -> dict:
     return {"id": _col(r, "id"), "name": _col(r, "name", ""), "mode": _col(r, "mode", "prepaid"),
@@ -438,18 +449,21 @@ def provision_account(a: dict) -> None:
     if script.exists():
         env = {**os.environ,
                "USERNAME": a["username"], "PASSWORD": a.get("password") or "",
+               "SYSTEM_USERNAME": ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"],
                "UUID": a.get("uuid") or "", "EXPIRES": a["expiresAt"],
                "IP_LIMIT": str(a["ipLimit"]), "QUOTA_GB": str(a["quotaGb"])}
         r = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, check=False)
         if r.returncode != 0:
             raise HTTPException(500, (r.stderr or r.stdout or "Provisioning failed").strip()[:500])
-    apply_speed_limit(a["username"], a["speedUpKbps"], a["speedDnKbps"])
+    limit_user = ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"]
+    apply_speed_limit(limit_user, a["speedUpKbps"], a["speedDnKbps"])
 
 
 def revoke_account(a: dict) -> None:
     script = SCRIPTS / f"revoke_{a['protocol']}.sh"
     if script.exists():
-        subprocess.run(["bash", str(script), a["username"]], check=False)
+        env = {**os.environ, "SYSTEM_USERNAME": ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"]}
+        subprocess.run(["bash", str(script), a["username"]], env=env, check=False)
 
 
 # ---------------------------------------------------------------------------
@@ -508,6 +522,12 @@ async def _panel_gate(request: Request, call_next):
                             httponly=True, secure=True, samesite="lax",
                             max_age=60 * 60 * 24 * 30)
             return resp
+        public_path = (
+            path.startswith("/u/") or path.startswith("/assets/") or
+            path.startswith("/api/public/") or path in ("/favicon.ico", "/manifest.webmanifest")
+        )
+        if public_path:
+            return await _strip_api_and_call(request, call_next)
         # No prefix — allow only when the gate cookie is already present
         # (for /assets/*, /api/*, and SPA sub-routes rendered client-side).
         if not gate_ok:
@@ -585,9 +605,18 @@ def system_status(_: str = Depends(require_auth)):
 
 @app.get("/system/traffic")
 def system_traffic(range: str = "24h", _: str = Depends(require_auth)):
-    if range == "1h":   since_min = 60;   bucket_sec = 60
-    elif range == "7d": since_min = 60*24*7; bucket_sec = 3600*2
-    else:               since_min = 60*24; bucket_sec = 3600
+    if range in ("1h", "hourly"):
+        since_min = 60; bucket_sec = 60
+    elif range in ("24h", "daily", "today"):
+        since_min = 60 * 24; bucket_sec = 3600
+    elif range in ("7d", "weekly", "week"):
+        since_min = 60 * 24 * 7; bucket_sec = 3600 * 6
+    elif range in ("30d", "monthly", "month"):
+        since_min = 60 * 24 * 30; bucket_sec = 86400
+    elif range in ("365d", "yearly", "year"):
+        since_min = 60 * 24 * 365; bucket_sec = 86400 * 7
+    else:
+        since_min = 60 * 24; bucket_sec = 3600
     since = datetime.now(timezone.utc) - timedelta(minutes=since_min)
     with db() as c:
         rows = c.execute(
@@ -815,7 +844,8 @@ def accounts_update(aid: str, patch: AccountPatch, user: str = Depends(require_a
     if a["protocol"] == "ssh" and (patch.password is not None or patch.expiresAt is not None):
         provision_account(a)
     elif patch.speedUpKbps is not None or patch.speedDnKbps is not None:
-        apply_speed_limit(a["username"], a["speedUpKbps"], a["speedDnKbps"])
+        limit_user = ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"]
+        apply_speed_limit(limit_user, a["speedUpKbps"], a["speedDnKbps"])
     log("audit", "account.update", f"Updated {r['protocol']} account {r['username']}",
         actor=user, target=r["username"])
     return a
@@ -837,11 +867,12 @@ def accounts_delete(aid: str, user: str = Depends(require_auth)):
 def accounts_config(aid: str, user: str = Depends(require_auth)):
     a = accounts_get(aid, user)
     host = kv_get(f"hosts.{a['protocol']}", "") or kv_get("panel.domain", PANEL_DOMAIN)
-    port = int(kv_get(f"ports.{a['protocol']}", "") or kv_get("panel.port", str(PANEL_PORT)) or PANEL_PORT)
+    port = int(kv_get(f"ports.{a['protocol']}", "") or "443")
     if a["protocol"] == "ssh":
-        return {"link": f"ssh://{a['username']}:{a['password']}@{host}:22",
+        login_user = ssh_login_username(a["username"])
+        return {"link": f"ssh://{login_user}:{a['password']}@{host}:22",
                 "text": f"Host: {host}\nPort: 22 (SSH), {port} (WebSocket path /)\n"
-                        f"User: {a['username']}\nPassword: {a['password']}"}
+                        f"User: {login_user}\nPanel user: {a['username']}\nPassword: {a['password']}"}
     if a["protocol"] == "vmess":
         cfg = {"v":"2","ps":a["username"],"add":host,"port":port,"id":a["uuid"],
                "aid":0,"net":"ws","type":"none","host":host,"path":"/vmess","tls":"tls"}
@@ -860,8 +891,21 @@ def accounts_subscription(aid: str, user: str = Depends(require_auth)):
 
 @app.get("/accounts/{aid}/detail")
 def accounts_detail(aid: str, user: str = Depends(require_auth)):
-    a = accounts_get(aid, user)
-    cfg = accounts_config(aid, user)
+    return account_detail_payload(aid)
+
+
+@app.get("/public/accounts/{aid}/detail")
+def public_accounts_detail(aid: str):
+    return account_detail_payload(aid)
+
+
+def account_detail_payload(aid: str):
+    with db() as c:
+        r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
+    if not r:
+        raise HTTPException(404, "Not found")
+    a = row_to_account(r)
+    cfg = accounts_config_public(a)
     try:
         exp = datetime.fromisoformat(a["expiresAt"].replace("Z", "+00:00"))
         days = max(0, (exp - datetime.now(timezone.utc)).days)
@@ -870,6 +914,24 @@ def accounts_detail(aid: str, user: str = Depends(require_auth)):
     return {"account": a, "configLink": cfg["link"], "configText": cfg["text"],
             "subscriptionUrl": f"https://{kv_get('panel.domain', PANEL_DOMAIN)}:{kv_get('panel.port', str(PANEL_PORT))}/u/{aid}",
             "daysRemaining": days, "hourly": [], "daily": [], "activeIps": []}
+
+
+def accounts_config_public(a: dict) -> dict:
+    host = kv_get(f"hosts.{a['protocol']}", "") or kv_get("panel.domain", PANEL_DOMAIN)
+    port = int(kv_get(f"ports.{a['protocol']}", "") or "443")
+    if a["protocol"] == "ssh":
+        login_user = ssh_login_username(a["username"])
+        return {"link": f"ssh://{login_user}:{a['password']}@{host}:22",
+                "text": f"Host: {host}\nPort: 22 (SSH), {port} (WebSocket path /)\n"
+                        f"User: {login_user}\nPanel user: {a['username']}\nPassword: {a['password']}"}
+    if a["protocol"] == "vmess":
+        cfg = {"v":"2","ps":a["username"],"add":host,"port":port,"id":a["uuid"],
+               "aid":0,"net":"ws","type":"none","host":host,"path":"/vmess","tls":"tls"}
+        return {"link": "vmess://" + base64.b64encode(json.dumps(cfg).encode()).decode(),
+                "text": json.dumps(cfg, indent=2)}
+    if a["protocol"] == "vless":
+        return {"link": f"vless://{a['uuid']}@{host}:{port}?type=ws&security=tls&path=%2Fvless#{a['username']}", "text": ""}
+    return {"link": f"trojan://{a['uuid']}@{host}:{port}?type=ws&security=tls&path=%2Ftrojan#{a['username']}", "text": ""}
 
 
 @app.post("/accounts/{aid}/telegram")

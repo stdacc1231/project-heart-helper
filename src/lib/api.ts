@@ -221,7 +221,7 @@ export const api = {
   },
   system: {
     async status() { return IS_PREVIEW ? mock.status() : req<SystemStatus>("/system/status"); },
-    async traffic(range: "1h" | "24h" | "7d" = "24h") { return IS_PREVIEW ? mock.traffic(range) : req<TrafficPoint[]>(`/system/traffic?range=${range}`); },
+    async traffic(range: "1h" | "24h" | "7d" | "30d" | "365d" = "24h") { return IS_PREVIEW ? mock.traffic(range === "30d" || range === "365d" ? "7d" : range) : req<TrafficPoint[]>(`/system/traffic?range=${range}`); },
     async version() { return IS_PREVIEW ? mock.version() : req<VersionInfo>("/system/version"); },
     async update() { return IS_PREVIEW ? mock.update() : req<{ ok: true; commit: string }>("/system/update", { method: "POST" }); },
     async restartService(name: string) { return IS_PREVIEW ? mock.restartService(name) : req(`/system/restart/${name}`, { method: "POST" }); },
@@ -244,6 +244,7 @@ export const api = {
     async exportCsv() { return IS_PREVIEW ? mock.exportCsv() : req<{ csv: string }>("/accounts/export"); },
     async sendTelegram(id: string) { return IS_PREVIEW ? mock.sendTelegram(id) : req(`/accounts/${id}/telegram`, { method: "POST" }); },
     async detail(id: string) { return IS_PREVIEW ? mock.userDetail(id) : req<UserDetail>(`/accounts/${id}/detail`); },
+    async publicDetail(id: string) { return IS_PREVIEW ? mock.userDetail(id) : req<UserDetail>(`/public/accounts/${id}/detail`); },
     async rotateToken(id: string) { return IS_PREVIEW ? mock.rotateToken(id) : req<{ token: string }>(`/accounts/${id}/rotate-token`, { method: "POST" }); },
   },
   connections: {

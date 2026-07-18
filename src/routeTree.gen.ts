@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AuthedIndexRouteImport } from './routes/_authed.index'
+import { Route as UIdRouteImport } from './routes/u.$id'
 import { Route as AuthedWalletRouteImport } from './routes/_authed.wallet'
 import { Route as AuthedUpdateRouteImport } from './routes/_authed.update'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed.settings'
@@ -39,6 +40,11 @@ const AuthedIndexRoute = AuthedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthedRoute,
+} as any)
+const UIdRoute = UIdRouteImport.update({
+  id: '/u/$id',
+  path: '/u/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedWalletRoute = AuthedWalletRouteImport.update({
   id: '/wallet',
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthedSettingsRoute
   '/update': typeof AuthedUpdateRoute
   '/wallet': typeof AuthedWalletRoute
+  '/u/$id': typeof UIdRoute
   '/accounts/$id': typeof AuthedAccountsIdRoute
 }
 export interface FileRoutesByTo {
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthedSettingsRoute
   '/update': typeof AuthedUpdateRoute
   '/wallet': typeof AuthedWalletRoute
+  '/u/$id': typeof UIdRoute
   '/': typeof AuthedIndexRoute
   '/accounts/$id': typeof AuthedAccountsIdRoute
 }
@@ -156,6 +164,7 @@ export interface FileRoutesById {
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/update': typeof AuthedUpdateRoute
   '/_authed/wallet': typeof AuthedWalletRoute
+  '/u/$id': typeof UIdRoute
   '/_authed/': typeof AuthedIndexRoute
   '/_authed/accounts/$id': typeof AuthedAccountsIdRoute
 }
@@ -176,6 +185,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/update'
     | '/wallet'
+    | '/u/$id'
     | '/accounts/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -192,6 +202,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/update'
     | '/wallet'
+    | '/u/$id'
     | '/'
     | '/accounts/$id'
   id:
@@ -210,6 +221,7 @@ export interface FileRouteTypes {
     | '/_authed/settings'
     | '/_authed/update'
     | '/_authed/wallet'
+    | '/u/$id'
     | '/_authed/'
     | '/_authed/accounts/$id'
   fileRoutesById: FileRoutesById
@@ -217,6 +229,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthedRoute: typeof AuthedRouteWithChildren
   LoginRoute: typeof LoginRoute
+  UIdRoute: typeof UIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -241,6 +254,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthedIndexRouteImport
       parentRoute: typeof AuthedRoute
+    }
+    '/u/$id': {
+      id: '/u/$id'
+      path: '/u/$id'
+      fullPath: '/u/$id'
+      preLoaderRoute: typeof UIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authed/wallet': {
       id: '/_authed/wallet'
@@ -386,6 +406,7 @@ const AuthedRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthedRoute: AuthedRouteWithChildren,
   LoginRoute: LoginRoute,
+  UIdRoute: UIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
