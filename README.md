@@ -63,11 +63,20 @@ autoscript reset-pass   # change admin password
 autoscript set-domain   # change panel domain / port / TLS mode (re-issues cert)
 autoscript set-repo     # change GitHub repo URL used for updates
 autoscript update       # git pull origin main + restart services
+autoscript repair       # reinstall/repair Xray, SSH-WS and Nginx
 autoscript restart      # restart agent, ssh-ws, bot, nginx
 autoscript logs         # tail service logs
 autoscript backup       # tar /etc/autoscript + xray config
 autoscript set-bot      # set Telegram bot token / admin chat id
 autoscript uninstall    # full uninstall
+```
+
+If your VPS still shows the old usage text and does not know `repair`, refresh
+the CLI once manually:
+
+```bash
+install -m 755 /opt/autoscript/backend/cli.sh /usr/local/bin/autoscript
+autoscript repair
 ```
 
 ## Uninstall
