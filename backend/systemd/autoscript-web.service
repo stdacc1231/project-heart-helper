@@ -9,7 +9,7 @@ EnvironmentFile=/etc/autoscript/agent.env
 Environment=HOST=127.0.0.1
 Environment=NODE_ENV=production
 WorkingDirectory=/opt/autoscript
-ExecStart=/usr/bin/node /opt/autoscript/.output/server/index.mjs
+ExecStart=/bin/sh -c 'PORT=${WEB_INTERNAL_PORT} exec /usr/bin/node /opt/autoscript/.output/server/index.mjs'
 Restart=on-failure
 RestartSec=3
 User=root
