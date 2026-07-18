@@ -289,6 +289,7 @@ export const api = {
   settings: {
     async get() { return IS_PREVIEW ? mock.settingsGet() : req<PanelSettings>("/settings"); },
     async save(s: Partial<PanelSettings>) { return IS_PREVIEW ? mock.settingsSave(s) : req<PanelSettings>("/settings", { method: "PATCH", body: JSON.stringify(s) }); },
+    async changePassword(current: string, next: string) { return IS_PREVIEW ? Promise.resolve({ ok: true as const }) : req("/settings/password", { method: "POST", body: JSON.stringify({ current, next }) }); },
   },
   logs: {
     async list(type?: "audit" | "service" | "auth") { return IS_PREVIEW ? mock.logs(type) : req<LogEntry[]>(`/logs${type ? `?type=${type}` : ""}`); },
