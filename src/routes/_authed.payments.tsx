@@ -32,10 +32,14 @@ function PaymentsPage() {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm">
+        <span className="font-semibold text-foreground">All buying & selling happens inside the Telegram bot.</span>
+        <span className="text-muted-foreground"> Users pick a plan in @bot, upload payment proof, then it lands here for your approval. Approving auto-creates the account and DMs the config back.</span>
+      </div>
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Payment approvals</h2>
-          <p className="text-sm text-muted-foreground">Approving auto-creates the account and sends config back through the bot.</p>
+          <p className="text-sm text-muted-foreground">Approve or reject buyer submissions from the bot.</p>
         </div>
         <Tabs value={status} onValueChange={(v) => setStatus(v as any)}>
           <TabsList>
@@ -46,6 +50,7 @@ function PaymentsPage() {
           </TabsList>
         </Tabs>
       </div>
+
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {(data ?? []).map((p) => (
