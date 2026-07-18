@@ -42,6 +42,8 @@ INSTALL_ROOT   = os.environ.get("INSTALL_ROOT", "/opt/autoscript")
 INTERNAL_TOKEN = os.environ.get("BOT_INTERNAL_TOKEN", "")
 UPLOAD_DIR     = Path(os.environ.get("UPLOAD_DIR", "/etc/autoscript/uploads"))
 SCRIPTS        = Path(INSTALL_ROOT) / "backend" / "scripts"
+PANEL_PATH     = (os.environ.get("PANEL_PATH", "") or "").strip("/")
+GATE_SECRET    = os.environ.get("GATE_SECRET", "gate-dev-change-me")
 
 JWT_ALG = "HS256"
 JWT_TTL = 60 * 60 * 24
