@@ -70,7 +70,7 @@ function PlansPage() {
                 <TableCell>{formatMoney(p.priceCents)}{p.mode !== "prepaid" && <span className="text-xs text-muted-foreground"> /{p.mode === "payg_gb" ? "GB" : "day"}</span>}</TableCell>
                 <TableCell>{p.durationDays ? `${p.durationDays}d` : "—"}</TableCell>
                 <TableCell>{p.quotaGb ? `${p.quotaGb} GB` : "∞"}</TableCell>
-                <TableCell className="text-xs">{p.speedDnKbps || "∞"} / {p.speedUpKbps || "∞"}</TableCell>
+                <TableCell className="text-xs">{p.speedDnKbps ? `${(p.speedDnKbps/1000).toFixed(p.speedDnKbps%1000?1:0)}` : "∞"} / {p.speedUpKbps ? `${(p.speedUpKbps/1000).toFixed(p.speedUpKbps%1000?1:0)}` : "∞"} Mbps</TableCell>
                 <TableCell>{p.ipLimit}</TableCell>
                 <TableCell><Badge variant={p.active ? "secondary" : "outline"}>{p.active ? "yes" : "no"}</Badge></TableCell>
                 <TableCell className="text-right">
