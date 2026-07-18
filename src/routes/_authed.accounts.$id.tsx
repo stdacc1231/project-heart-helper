@@ -1,14 +1,14 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { ArrowLeft, Copy, Trash2, Save, Send } from "lucide-react";
+import { ArrowLeft, Copy, Trash2, Save, Send, ShieldCheck, Wifi, HardDrive, Users, Globe2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { api, formatBytes, type Account } from "@/lib/api";
+import { api, formatBytes, PROTOCOL_LABELS, type Account, type ConnectionProfile } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/accounts/$id")({
@@ -20,8 +20,8 @@ function AccountDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["account", id], queryFn: () => api.accounts.get(id) });
-  const { data: cfg } = useQuery({ queryKey: ["account-cfg", id], queryFn: () => api.accounts.config(id) });
+  const { data: detail } = useQuery({ queryKey: ["account-detail", id], queryFn: () => api.accounts.detail(id) });
+  const data = detail?.account;
   const [f, setF] = useState<Partial<Account>>({});
   useEffect(() => { if (data) setF(data); }, [data]);
 
@@ -29,6 +29,7 @@ function AccountDetail() {
     mutationFn: () => api.accounts.update(id, f),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["account", id] });
+      qc.invalidateQueries({ queryKey: ["account-detail", id] });
       qc.invalidateQueries({ queryKey: ["accounts"] });
       toast.success("Saved");
     },
@@ -48,13 +49,25 @@ function AccountDetail() {
 
   if (!data) return <div className="text-sm text-muted-foreground">Loading…</div>;
 
+  const limitBytes = detail?.usage?.limitBytes ?? (data.quotaGb ? data.quotaGb * 1024 ** 3 : 0);
+  const remainingBytes = detail?.usage?.remainingBytes ?? Math.max(0, limitBytes - data.usedBytes);
+  const profiles = detail?.connectionProfiles ?? [];
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" asChild><Link to="/accounts"><ArrowLeft className="h-4 w-4" /></Link></Button>
         <h2 className="text-lg font-semibold">{data.username}</h2>
-        <Badge variant="outline" className="uppercase">{data.protocol}</Badge>
+        <Badge variant="outline" className="uppercase">{PROTOCOL_LABELS[data.protocol]}</Badge>
         <Badge>{data.status}</Badge>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <Metric icon={Globe2} label="Host" value={detail?.host ?? "—"} sub="Protocol domain" />
+        <Metric icon={ShieldCheck} label="Login" value={detail?.loginUsername ?? data.username} sub={data.protocol === "ssh" ? "Linux SSH user" : "Client name"} />
+        <Metric icon={HardDrive} label="Used" value={formatBytes(data.usedBytes)} sub={limitBytes ? `${formatBytes(remainingBytes)} left` : "Unlimited quota"} />
+        <Metric icon={Users} label="IP limit" value={data.ipLimit ? String(data.ipLimit) : "∞"} sub={`${detail?.activeIps?.length ?? data.online} online now`} />
+        <Metric icon={Wifi} label="Speed" value={`↓ ${speed(data.speedDnKbps)} / ↑ ${speed(data.speedUpKbps)}`} sub="Mbps" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -106,7 +119,11 @@ function AccountDetail() {
           <h3 className="mb-3 text-sm font-medium">Usage</h3>
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <Field label="Used" value={formatBytes(data.usedBytes)} />
+            <Field label="Quota" value={limitBytes ? formatBytes(limitBytes) : "Unlimited"} />
+            <Field label="Remaining" value={limitBytes ? formatBytes(remainingBytes) : "Unlimited"} />
             <Field label="Online now" value={String(data.online)} />
+            <Field label="Login user" value={detail?.loginUsername ?? data.username} mono />
+            <Field label="Host" value={detail?.host ?? "—"} mono />
             <Field label="Created" value={new Date(data.createdAt).toLocaleString()} />
             <Field label="Expires" value={new Date(data.expiresAt).toLocaleString()} />
             {data.uuid && <Field label="UUID" value={data.uuid} mono />}
@@ -115,10 +132,27 @@ function AccountDetail() {
         </Card>
 
         <Card className="p-4 lg:col-span-2">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-medium">Online IPs</h3>
+            <Badge variant="outline">{detail?.activeIps?.length ?? 0} active</Badge>
+          </div>
+          {detail?.activeIps?.length ? (
+            <div className="grid gap-2 md:grid-cols-2">
+              {detail.activeIps.map((ip) => (
+                <div key={ip.ip} className="rounded-md border bg-muted/30 p-3 text-sm">
+                  <div className="font-mono">{ip.ip}</div>
+                  <div className="text-xs text-muted-foreground">Last seen {new Date(ip.lastSeen).toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          ) : <div className="text-sm text-muted-foreground">No active IPs detected right now.</div>}
+        </Card>
+
+        <Card className="p-4 lg:col-span-2">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-medium">Client config</h3>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(cfg?.link ?? ""); toast.success("Copied"); }}>
+              <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(detail?.configLink ?? ""); toast.success("Copied"); }}>
                 <Copy className="mr-1 h-4 w-4" /> Copy link
               </Button>
               {data.telegramId && (
@@ -128,12 +162,58 @@ function AccountDetail() {
               )}
             </div>
           </div>
-          <Input readOnly value={cfg?.link ?? ""} className="font-mono text-xs" />
-          {cfg?.text && (
-            <Textarea readOnly value={cfg.text} className="mt-3 font-mono text-xs" rows={6} />
+          <Input readOnly value={detail?.configLink ?? ""} className="font-mono text-xs" />
+          {detail?.configText && (
+            <Textarea readOnly value={detail.configText} className="mt-3 font-mono text-xs" rows={8} />
           )}
         </Card>
+
+        <Card className="p-4 lg:col-span-2">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-medium">All connection settings</h3>
+            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(detail?.subscriptionUrl ?? ""); toast.success("User status link copied"); }}>
+              <Copy className="mr-1 h-4 w-4" /> User status link
+            </Button>
+          </div>
+          <div className="grid gap-3">
+            {profiles.map((p) => <ProfileCard key={`${p.label}-${p.port}`} profile={p} />)}
+            {profiles.length === 0 && <div className="text-sm text-muted-foreground">No connection profiles generated.</div>}
+          </div>
+        </Card>
       </div>
+    </div>
+  );
+}
+
+function Metric({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub: string }) {
+  return (
+    <Card className="p-4">
+      <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+        <span>{label}</span>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="break-words text-lg font-semibold">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{sub}</div>
+    </Card>
+  );
+}
+
+function ProfileCard({ profile }: { profile: ConnectionProfile }) {
+  const copy = async (text: string) => {
+    await navigator.clipboard.writeText(text);
+    toast.success("Copied");
+  };
+  return (
+    <div className="rounded-md border bg-muted/25 p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{profile.label}</Badge>
+          <span className="font-mono text-xs text-muted-foreground">{profile.host}:{profile.port}{profile.path || ""}</span>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => copy(profile.link)}><Copy className="mr-1 h-4 w-4" /> Copy</Button>
+      </div>
+      <div className="break-all rounded border bg-background/40 p-2 font-mono text-xs">{profile.link}</div>
+      {profile.text && profile.text !== profile.link && <Textarea readOnly value={profile.text} className="mt-2 font-mono text-xs" rows={4} />}
     </div>
   );
 }
@@ -145,4 +225,8 @@ function Field({ label, value, mono }: { label: string; value: string; mono?: bo
       <dd className={mono ? "font-mono text-xs break-all" : ""}>{value}</dd>
     </div>
   );
+}
+
+function speed(kbps: number) {
+  return kbps ? `${(kbps / 1000).toFixed(kbps % 1000 ? 1 : 0)}` : "∞";
 }
