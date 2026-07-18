@@ -43,8 +43,13 @@ restart_stack() {
   systemctl restart autoscript-agent autoscript-ssh-ws autoscript-bot 2>/dev/null || true
   systemctl reload-or-restart nginx 2>/dev/null || true
 }
-rand_slug() { tr -dc 'a-z0-9' </dev/urandom | head -c "${1:-14}"; }
-rand_pass() { tr -dc 'A-Za-z0-9' </dev/urandom | head -c 18; }
+# Read from the controlling terminal so commands still work with piped/stdin use.
+if { exec 3</dev/tty; } 2>/dev/null; then :; else exec 3<&0; fi
+ask()    { local __v; IFS= read -r -u 3 -p "$1" __v || __v=""; printf -v "$2" '%s' "$__v"; }
+ask_pw() { local __v; IFS= read -r -s -u 3 -p "$1" __v || __v=""; echo; printf -v "$2" '%s' "$__v"; }
+rand_chars() { local chars=$1 n=$2 out=""; while [[ ${#out} -lt $n ]]; do out+=$(LC_ALL=C tr -dc "$chars" </dev/urandom | head -c "$((n-${#out}))" || true); done; printf '%s' "$out"; }
+rand_slug() { rand_chars 'a-z0-9' "${1:-14}"; }
+rand_pass() { rand_chars 'A-Za-z0-9' 18; }
 CF_PORTS_ALL="443 2053 2083 2087 2096 8443 80 8080 8880 2052 2082 2086 2095"
 pick_port() {
   local p
@@ -72,7 +77,7 @@ show_status() {
 }
 
 reset_admin_user() {
-  read -rp "New admin username [$ADMIN_USER]: " u
+  ask "New admin username [$ADMIN_USER]: " u
   u=${u:-$ADMIN_USER}
   [[ "$u" =~ ^[a-zA-Z0-9_.-]{2,32}$ ]] || die "Invalid username."
   set_env ADMIN_USER "$u"
@@ -82,12 +87,12 @@ reset_admin_user() {
 }
 
 reset_admin_password() {
-  read -rsp "New admin password (blank to auto-generate): " p1; echo
+  ask_pw "New admin password (blank to auto-generate): " p1
   local auto=0
   if [[ -z "$p1" ]]; then
     p1=$(rand_pass); auto=1
   else
-    read -rsp "Repeat password : " p2; echo
+    ask_pw "Repeat password : " p2
     [[ "$p1" == "$p2" && ${#p1} -ge 6 ]] || die "Passwords do not match or too short (min 6)."
   fi
   local hash
@@ -102,7 +107,7 @@ reset_admin_password() {
 change_panel_port() {
   local old="$PANEL_PORT" new
   echo "Current panel port: ${old}"
-  read -rp "New port (blank = auto-random, must avoid CF ports): " new
+  ask "New port (blank = auto-random, must avoid CF ports): " new
   if [[ -z "$new" ]]; then
     new=$(pick_port)
   else
@@ -119,7 +124,7 @@ change_panel_port() {
 
 change_panel_path() {
   echo "Current secret path: /${PANEL_PATH:-<none>}/"
-  read -rp "New path slug (blank = regenerate random, '-' to disable): " p
+  ask "New path slug (blank = regenerate random, '-' to disable): " p
   if [[ -z "$p" ]]; then p=$(rand_slug 14)
   elif [[ "$p" == "-" ]]; then p=""
   else
@@ -136,10 +141,10 @@ change_panel_path() {
 }
 
 change_panel_domain() {
-  read -rp "New panel domain (current: $PANEL_DOMAIN): " d
+  ask "New panel domain (current: $PANEL_DOMAIN): " d
   [[ -n "$d" ]] || die "Domain required."
   echo "TLS mode:  1) single-domain  2) wildcard"
-  read -rp "Choose [1-2, current mode kept if blank]: " mode
+  ask "Choose [1-2, current mode kept if blank]: " mode
   set_env PANEL_DOMAIN "$d"
   set_setting "panel.domain" "$d"
   [[ "$mode" == "1" ]] && set_setting "panel.tlsMode" "single"
@@ -151,7 +156,7 @@ change_panel_domain() {
 }
 
 change_repo_url() {
-  read -rp "New GitHub repo URL [${REPO_URL:-none}]: " r
+  ask "New GitHub repo URL [${REPO_URL:-none}]: " r
   [[ -n "$r" ]] || die "Repo URL required."
   set_env REPO_URL "$r"
   ( cd "$INSTALL_ROOT" && git remote set-url origin "$r" 2>/dev/null || git init -q && git remote add origin "$r" )
@@ -179,7 +184,7 @@ restart_services() { restart_stack; ok "Services restarted."; }
 
 view_logs() {
   echo "1) agent   2) ssh-ws   3) bot   4) nginx   5) ip-limit"
-  read -rp "Which log? " x
+  ask "Which log? " x
   case "$x" in
     1) journalctl -u autoscript-agent   -n 200 --no-pager ;;
     2) journalctl -u autoscript-ssh-ws  -n 200 --no-pager ;;
@@ -199,8 +204,8 @@ backup_now() {
 }
 
 reset_bot() {
-  read -rp "Telegram bot token (blank to disable): " t
-  read -rp "Admin chat id: " c
+  ask "Telegram bot token (blank to disable): " t
+  ask "Admin chat id: " c
   set_setting "bot.token"       "$t"
   set_setting "bot.adminChatId" "$c"
   set_setting "bot.enabled"     "$([[ -n "$t" ]] && echo 1 || echo 0)"
@@ -209,7 +214,7 @@ reset_bot() {
 }
 
 uninstall_all() {
-  read -rp "Type UNINSTALL to confirm: " ans
+  ask "Type UNINSTALL to confirm: " ans
   [[ "$ans" == "UNINSTALL" ]] || { warn "Cancelled."; return; }
   bash "$INSTALL_ROOT/backend/uninstall.sh"
 }
@@ -235,7 +240,7 @@ ${BLD}${BLU}Autoscript Admin CLI${RST}
 13) Uninstall panel
  0) Exit
 EOF
-  read -rp "Choose: " c
+  ask "Choose: " c
   case "$c" in
     1) show_status ;;
     2) reset_admin_user ;;
@@ -253,7 +258,7 @@ EOF
     0) exit 0 ;;
     *) warn "Unknown option" ;;
   esac
-  echo; read -rp "Press enter to return to menu…" _; menu
+  echo; ask "Press enter to return to menu…" _; menu
 }
 
 # ---------- non-interactive flags ----------

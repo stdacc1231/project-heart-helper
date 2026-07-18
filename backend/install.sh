@@ -22,8 +22,9 @@ PLAIN_PORTS_DEFAULT="80,8080,8880,2052,2082,2086,2095"
 CF_PORTS_ALL="443 2053 2083 2087 2096 8443 80 8080 8880 2052 2082 2086 2095"
 
 # ---------- helpers ----------
-rand_slug() { tr -dc 'a-z0-9' </dev/urandom | head -c "${1:-14}"; }
-rand_pass() { tr -dc 'A-Za-z0-9' </dev/urandom | head -c 18; }
+rand_chars() { local chars=$1 n=$2 out=""; while [[ ${#out} -lt $n ]]; do out+=$(LC_ALL=C tr -dc "$chars" </dev/urandom | head -c "$((n-${#out}))" || true); done; printf '%s' "$out"; }
+rand_slug() { rand_chars 'a-z0-9' "${1:-14}"; }
+rand_pass() { rand_chars 'A-Za-z0-9' 18; }
 pick_port() {
   # Random high port not in CF list and not currently listening.
   local p
@@ -36,7 +37,7 @@ pick_port() {
 }
 # Read from the controlling terminal so `bash <(curl ...)` still works
 # (otherwise stdin is the piped script and every `read` hits EOF).
-if [[ -r /dev/tty ]]; then exec 3</dev/tty; else exec 3<&0; fi
+if { exec 3</dev/tty; } 2>/dev/null; then :; else exec 3<&0; fi
 ask()    { local __v; IFS= read -r -u 3 -p "$1" __v || __v=""; printf -v "$2" '%s' "$__v"; }
 ask_pw() { local __v; IFS= read -r -s -u 3 -p "$1" __v || __v=""; echo; printf -v "$2" '%s' "$__v"; }
 
