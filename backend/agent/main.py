@@ -515,10 +515,14 @@ def active_ips_for_account(a: dict) -> list[dict[str, str]]:
         return []
     user = ssh_login_username(a["username"])
     try:
-        r = run(["bash", "-lc", "ss -tnp 2>/dev/null | awk '/sshd/ {print $5}' | sed 's/::ffff://' | sed 's/:.*//' | sort -u"])
-        ips = [x.strip() for x in r.stdout.splitlines() if x.strip() and x.strip() not in {"127.0.0.1", "0.0.0.0"}]
         if run(["id", "-u", user]).returncode != 0:
             return []
+        pids = [p for p in run(["pgrep", "-u", user, "sshd"]).stdout.split() if p.isdigit()]
+        if not pids:
+            return []
+        pid_re = "|".join(pids)
+        r = run(["bash", "-lc", f"ss -tnp 2>/dev/null | grep -E 'pid=({pid_re}),' | awk '{{print $5}}' | sed 's/::ffff://' | sed 's/:.*//' | sort -u"])
+        ips = [x.strip() for x in r.stdout.splitlines() if x.strip() and x.strip() not in {"127.0.0.1", "0.0.0.0"}]
         return [{"ip": ip, "country": "", "lastSeen": datetime.now(timezone.utc).isoformat()} for ip in ips]
     except Exception:
         return []
@@ -792,7 +796,10 @@ def accounts_list(protocol: Optional[str] = None, _: str = Depends(require_auth)
         if protocol: q += " WHERE protocol = ?"; args = (protocol,)
         q += " ORDER BY created_at DESC"
         rows = c.execute(q, args).fetchall()
-    return [row_to_account(r) for r in rows]
+    items = [row_to_account(r) for r in rows]
+    for a in items:
+        a["online"] = len(active_ips_for_account(a))
+    return items
 
 
 @app.post("/accounts/bulk")
@@ -873,7 +880,9 @@ def accounts_get(aid: str, _: str = Depends(require_auth)):
     with db() as c:
         r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
     if not r: raise HTTPException(404, "Not found")
-    return row_to_account(r)
+    a = row_to_account(r)
+    a["online"] = len(active_ips_for_account(a))
+    return a
 
 
 @app.post("/accounts")
