@@ -210,6 +210,8 @@ say "Writing agent config"
 JWT_SECRET=$(openssl rand -hex 32)
 BOT_INTERNAL_TOKEN=$(openssl rand -hex 32)
 GATE_SECRET=$(openssl rand -hex 32)
+# random local-only port for the Node web server (FastAPI reverse-proxies to it)
+WEB_INTERNAL_PORT=$(( ( RANDOM % 20000 ) + 20000 ))
 
 # passlib bcrypt (matches the agent's verifier)
 python3 -m venv "$INSTALL_ROOT/backend/.venv"
