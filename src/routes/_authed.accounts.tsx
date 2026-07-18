@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -140,7 +139,6 @@ function AccountsPage() {
                     a.status === "trial"  ? "border-accent/40 text-accent" :
                     a.status === "locked" ? "border-warning/40 text-warning" : "border-destructive/40 text-destructive"
                   }>{a.status}</Badge>
-                  {a.cdn && <Badge variant="outline" className="border-chart-3/40 text-chart-3 mono uppercase text-[10px]">cdn</Badge>}
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" title="Copy subscription URL" onClick={() => copySub(a.id)}><Copy className="h-4 w-4" /></Button>
@@ -175,7 +173,7 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
     protocol: "ssh", username: "", password: "",
     ipLimit: 2, speedUpKbps: 0, speedDnKbps: 0, quotaGb: 0,
     expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10),
-    cdn: false, trial: false,
+    trial: false,
   });
   const qc = useQueryClient();
   const create = useMutation({
@@ -267,14 +265,7 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
             <Label>Quota GB (0 = ∞)</Label>
             <Input type="number" value={f.quotaGb} onChange={(e) => setF({ ...f, quotaGb: +e.target.value })} />
           </div>
-          <div className="col-span-2 grid grid-cols-2 gap-3">
-            <div className="flex items-center justify-between rounded-md border border-border/60 bg-background/40 p-3">
-              <div>
-                <div className="text-sm">Route through CDN</div>
-                <div className="text-xs text-muted-foreground">Cloudflare-safe WS transport</div>
-              </div>
-              <Switch checked={!!f.cdn} onCheckedChange={(v) => setF({ ...f, cdn: v })} />
-            </div>
+          <div className="col-span-2">
             <div className="flex items-center justify-between rounded-md border border-border/60 bg-background/40 p-3">
               <div className="min-w-0">
                 <div className="text-sm">Trial (hours)</div>
