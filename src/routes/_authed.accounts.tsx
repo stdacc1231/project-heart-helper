@@ -148,7 +148,7 @@ function AccountsPage() {
                 <TableCell className="mono text-xs">{new Date(a.expiresAt).toLocaleDateString()}</TableCell>
                 <TableCell className="mono text-[11px] leading-tight">
                   <div>IP {a.ipLimit}</div>
-                  <div>↓ {a.speedDnKbps ? `${a.speedDnKbps}k` : "∞"}  ↑ {a.speedUpKbps ? `${a.speedUpKbps}k` : "∞"}</div>
+                  <div>↓ {a.speedDnKbps ? `${(a.speedDnKbps/1000).toFixed(a.speedDnKbps%1000?1:0)}M` : "∞"}  ↑ {a.speedUpKbps ? `${(a.speedUpKbps/1000).toFixed(a.speedUpKbps%1000?1:0)}M` : "∞"}</div>
                   <div>Q {a.quotaGb ? `${a.quotaGb}G` : "∞"}</div>
                 </TableCell>
                 <TableCell className="mono text-xs">{formatBytes(a.usedBytes)}</TableCell>
