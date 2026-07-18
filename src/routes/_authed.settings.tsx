@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_authed/settings")({
 
 const CF_TLS_PORTS   = [443, 2053, 2083, 2087, 2096, 8443];
 const CF_PLAIN_PORTS = [80, 8080, 8880, 2052, 2082, 2086, 2095];
-const PROTOS: Protocol[] = ["ssh","vmess","vless","trojan","shadowsocks","hysteria2","tuic","wireguard","reality"];
+const PROTOS: Protocol[] = ["ssh","vmess","vless","trojan"];
 
 function SettingsPage() {
   const { data: s } = useQuery({ queryKey: ["status"], queryFn: () => api.system.status() });

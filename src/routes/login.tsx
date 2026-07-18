@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, ArrowRight } from "lucide-react";
+import { ShieldCheck, ArrowRight, ServerCog, Activity, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
-  const [u, setU] = useState("admin");
+  const [u, setU] = useState("");
   const [p, setP] = useState("");
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -30,28 +30,30 @@ function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center aurora-bg px-4 py-10">
-      {/* decorative aurora blobs */}
-      <div className="pointer-events-none absolute -left-32 top-10 h-96 w-96 rounded-full bg-primary/20 blur-3xl" />
-      <div className="pointer-events-none absolute -right-24 bottom-10 h-96 w-96 rounded-full bg-accent/20 blur-3xl" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,var(--color-background)_75%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,var(--color-border)_1px,transparent_1px),linear-gradient(to_bottom,var(--color-border)_1px,transparent_1px)] bg-[size:44px_44px] opacity-[0.08]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,var(--color-background)_78%)]" />
 
       <div className="relative grid w-full max-w-5xl gap-8 lg:grid-cols-[1.15fr_1fr] lg:items-center">
         {/* Brand column */}
         <div className="hidden lg:block">
           <div className="mono mb-3 text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Autoscript · Ops Panel</div>
           <h1 className="font-display text-5xl font-semibold leading-[1.05] tracking-tight">
-            <span className="aurora-text">Every protocol.</span>
+            <span className="aurora-text">Secure VPS control.</span>
             <br />
             One clean panel.
           </h1>
           <p className="mt-4 max-w-md text-sm text-muted-foreground">
-            SSH-WS, VMess, VLESS, Trojan, Shadowsocks, Hysteria2, TUIC, WireGuard and Reality — provisioned,
-            monitored and billed from the same web UI. Cloudflare-safe out of the box.
+            Manage accounts, live traffic, Telegram payments, updates, certificates and service health from your own server.
           </p>
-          <div className="mt-6 grid grid-cols-3 gap-2 text-xs">
-            {["SSH / WS", "VMess", "VLESS", "Trojan", "Shadowsocks", "Hysteria2", "TUIC", "WireGuard", "Reality"].map((p) => (
-              <div key={p} className="mono rounded-md border border-border/60 bg-card/40 px-2 py-1.5 text-center uppercase tracking-widest text-muted-foreground">
-                {p}
+          <div className="mt-6 grid grid-cols-3 gap-3 text-xs">
+            {[
+              { label: "Services", icon: ServerCog },
+              { label: "Traffic", icon: Activity },
+              { label: "Updates", icon: RefreshCw },
+            ].map(({ label, icon: Icon }) => (
+              <div key={label} className="rounded-md border border-border/60 bg-card/40 p-3">
+                <Icon className="mb-2 h-4 w-4 text-primary" />
+                <div className="mono uppercase tracking-widest text-muted-foreground">{label}</div>
               </div>
             ))}
           </div>
@@ -84,9 +86,6 @@ function LoginPage() {
             <Button type="submit" className="group h-11 w-full text-base font-medium" disabled={login.isPending}>
               {login.isPending ? "Signing in…" : (<>Sign in <ArrowRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-0.5" /></>)}
             </Button>
-            <p className="mono text-center text-[11px] uppercase tracking-widest text-muted-foreground">
-              Preview · any non-empty password works
-            </p>
           </form>
         </div>
       </div>

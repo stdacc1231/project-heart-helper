@@ -1,19 +1,13 @@
 // Web UI -> Python Agent API client with Lovable-preview mock fallback.
 
 export type Protocol =
-  | "ssh" | "vmess" | "vless" | "trojan"
-  | "shadowsocks" | "hysteria2" | "tuic" | "wireguard" | "reality";
+  | "ssh" | "vmess" | "vless" | "trojan";
 
 export const PROTOCOL_LABELS: Record<Protocol, string> = {
   ssh: "SSH / WS",
   vmess: "VMess",
   vless: "VLESS",
   trojan: "Trojan",
-  shadowsocks: "Shadowsocks",
-  hysteria2: "Hysteria2",
-  tuic: "TUIC",
-  wireguard: "WireGuard",
-  reality: "VLESS-Reality",
 };
 
 export interface Account {
