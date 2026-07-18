@@ -36,7 +36,7 @@ PANEL_PORT     = int(os.environ.get("PANEL_PORT", "443"))
 DB_PATH        = os.environ.get("DB_PATH", "/etc/autoscript/db.sqlite")
 JWT_SECRET     = os.environ.get("JWT_SECRET", "dev-secret-change-me")
 ADMIN_USER     = os.environ.get("ADMIN_USER", "admin")
-ADMIN_HASH     = os.environ.get("ADMIN_HASH", "")
+ADMIN_HASH     = os.environ.get("ADMIN_HASH", "").strip().strip("'\"")
 REPO_URL       = os.environ.get("REPO_URL", "")
 INSTALL_ROOT   = os.environ.get("INSTALL_ROOT", "/opt/autoscript")
 INTERNAL_TOKEN = os.environ.get("BOT_INTERNAL_TOKEN", "")
@@ -238,6 +238,11 @@ class SettingsIn(BaseModel):
     repoUrl: Optional[str] = None
 
 
+class PasswordIn(BaseModel):
+    current: str
+    next: str
+
+
 class PaymentBotIn(BaseModel):
     telegramId: str
     telegramName: str
@@ -250,6 +255,37 @@ class PaymentBotIn(BaseModel):
 # ---------------------------------------------------------------------------
 def run(cmd: list[str], check=False) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, check=check)
+
+
+def verify_admin_password(password: str) -> bool:
+    if not ADMIN_HASH:
+        return False
+    try:
+        if ADMIN_HASH.startswith("$argon2"):
+            return argon2.verify(password, ADMIN_HASH)
+        import crypt as _c
+        return _c.crypt(password, ADMIN_HASH) == ADMIN_HASH
+    except Exception:
+        return False
+
+
+def update_env_value(key: str, value: str) -> None:
+    env_path = Path("/etc/autoscript/agent.env")
+    if not env_path.exists():
+        return
+    lines = env_path.read_text().splitlines()
+    out: list[str] = []
+    done = False
+    safe = value.replace("'", "'\\''")
+    for line in lines:
+        if line.startswith(f"{key}="):
+            out.append(f"{key}='{safe}'")
+            done = True
+        else:
+            out.append(line)
+    if not done:
+        out.append(f"{key}='{safe}'")
+    env_path.write_text("\n".join(out) + "\n")
 
 
 def row_to_account(r: sqlite3.Row) -> dict:
@@ -366,16 +402,7 @@ async def _strip_api_and_call(request: Request, call_next):
 # ---- Auth ------------------------------------------------------------------
 @app.post("/auth/login")
 def auth_login(inp: LoginIn, request: Request, response: Response):
-    ok = False
-    if inp.username == ADMIN_USER and ADMIN_HASH:
-        try:
-            if ADMIN_HASH.startswith("$argon2"):
-                ok = argon2.verify(inp.password, ADMIN_HASH)
-            else:
-                import crypt as _c
-                ok = _c.crypt(inp.password, ADMIN_HASH) == ADMIN_HASH
-        except Exception:
-            ok = False
+    ok = inp.username == ADMIN_USER and verify_admin_password(inp.password)
     client_ip = (request.client.host if request.client else "-")
     if not ok:
         print(f"Failed login for {inp.username} from {client_ip}", flush=True)
@@ -467,19 +494,20 @@ def system_version(_: str = Depends(require_auth)):
 
 @app.post("/system/update")
 def system_update(user: str = Depends(require_auth)):
-    run(["git", "-C", INSTALL_ROOT, "fetch", "--all"])
-    run(["git", "-C", INSTALL_ROOT, "reset", "--hard", "origin/main"])
-    migrate = Path(INSTALL_ROOT) / "backend" / "scripts" / "migrate.sh"
-    if migrate.exists(): run(["bash", str(migrate)])
-    commit = subprocess.check_output(["git", "-C", INSTALL_ROOT, "rev-parse", "--short", "HEAD"], text=True).strip()
-    log("audit", "system.update", f"Updated to {commit}", actor=user)
-    subprocess.Popen(["systemctl", "restart", "autoscript-agent", "autoscript-bot", "nginx"])
+    run(["git", "-C", INSTALL_ROOT, "fetch", "--all", "--prune"])
+    try:
+        commit = subprocess.check_output(["git", "-C", INSTALL_ROOT, "rev-parse", "--short", "origin/main"], text=True).strip()
+    except Exception:
+        commit = "queued"
+    cmd = "nohup /usr/local/bin/autoscript update >> /var/log/autoscript-update.log 2>&1 &"
+    subprocess.Popen(["bash", "-lc", cmd], start_new_session=True)
+    log("audit", "system.update", f"Update queued for {commit}", actor=user)
     return {"ok": True, "commit": commit}
 
 
 @app.post("/system/restart/{svc}")
 def system_restart(svc: str, user: str = Depends(require_auth)):
-    if svc not in ("xray", "nginx", "autoscript-agent", "autoscript-bot", "autoscript-ssh-ws"):
+    if svc not in ("xray", "nginx", "autoscript-agent", "autoscript-web", "autoscript-bot", "autoscript-ssh-ws"):
         raise HTTPException(400, "Not allowed")
     subprocess.Popen(["systemctl", "restart", svc])
     log("audit", "system.restart", f"Restart {svc}", actor=user); return {"ok": True}
@@ -745,6 +773,20 @@ def settings_save(inp: SettingsIn, user: str = Depends(require_auth)):
         subprocess.Popen(["bash", str(apply)])
     log("audit", "settings.update", f"Settings updated: {list(changed)}", actor=user)
     return settings_get(user)
+
+
+@app.post("/settings/password")
+def settings_password(inp: PasswordIn, user: str = Depends(require_auth)):
+    global ADMIN_HASH
+    if len(inp.next) < 6:
+        raise HTTPException(400, "New password must be at least 6 characters")
+    if not verify_admin_password(inp.current):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Current password is wrong")
+    ADMIN_HASH = argon2.hash(inp.next)
+    update_env_value("ADMIN_HASH", ADMIN_HASH)
+    kv_set("admin.hash", ADMIN_HASH)
+    log("audit", "settings.password", "Admin password changed", actor=user, level="warn")
+    return {"ok": True}
 
 
 # ---- Logs ------------------------------------------------------------------

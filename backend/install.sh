@@ -148,7 +148,7 @@ else
 fi
 
 # --------------------------------------------------------------------------
-say "Building the web UI (npm build → dist/)"
+say "Building the web UI (Node server bundle)"
 build_web_ui || warn "SPA build failed — panel will not load until you run 'autoscript update'."
 
 # --------------------------------------------------------------------------
