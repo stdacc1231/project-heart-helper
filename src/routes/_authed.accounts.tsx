@@ -188,6 +188,7 @@ function AccountsPage() {
 
 function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
   const { data: plans } = useQuery({ queryKey: ["plans"], queryFn: () => api.plans.list() });
+  const [trialHours, setTrialHours] = useState<number>(0);
   const [f, setF] = useState<Partial<Account>>({
     protocol: "ssh", username: "", password: "",
     ipLimit: 2, speedUpKbps: 0, speedDnKbps: 0, quotaGb: 0,
@@ -196,7 +197,12 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
   });
   const qc = useQueryClient();
   const create = useMutation({
-    mutationFn: () => api.accounts.create({ ...f, expiresAt: new Date(f.expiresAt!).toISOString() }),
+    mutationFn: () => {
+      const expiresAt = trialHours > 0
+        ? new Date(Date.now() + trialHours * 3600_000).toISOString()
+        : new Date(f.expiresAt!).toISOString();
+      return api.accounts.create({ ...f, trial: trialHours > 0 || !!f.trial, expiresAt });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["accounts"] });
       toast.success("Account created");
@@ -215,7 +221,9 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
       quotaGb: p.quotaGb,
       expiresAt: new Date(Date.now() + (p.durationDays || 30) * 86400_000).toISOString().slice(0, 10),
     });
+    setTrialHours(0);
   };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -286,13 +294,23 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
               <Switch checked={!!f.cdn} onCheckedChange={(v) => setF({ ...f, cdn: v })} />
             </div>
             <div className="flex items-center justify-between rounded-md border border-border/60 bg-background/40 p-3">
-              <div>
-                <div className="text-sm">Trial (1 hour)</div>
-                <div className="text-xs text-muted-foreground">Auto-deletes on expiry</div>
+              <div className="min-w-0">
+                <div className="text-sm">Trial (hours)</div>
+                <div className="text-xs text-muted-foreground">Overrides expiry. 0 = disabled.</div>
               </div>
-              <Switch checked={!!f.trial} onCheckedChange={(v) => setF({ ...f, trial: v })} />
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number" min={0} step={1}
+                  className="w-20 text-right"
+                  value={trialHours}
+                  onChange={(e) => setTrialHours(Math.max(0, +e.target.value || 0))}
+                />
+                <Button type="button" size="sm" variant="outline" onClick={() => setTrialHours(1)}>1h</Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => setTrialHours(24)}>24h</Button>
+              </div>
             </div>
           </div>
+
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

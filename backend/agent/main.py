@@ -760,38 +760,40 @@ def logs_list(type: Optional[str] = None, limit: int = 200, _: str = Depends(req
              "message": r["message"]} for r in rows]
 
 
-# ---- SPA (must be registered last so /api/* and other routes take priority)
+# ---- Reverse proxy to the TanStack Start Node server (registered last so
+# ---- /api/* and other API routes take priority).
 try:
-    from fastapi.responses import FileResponse, PlainTextResponse
-    from fastapi.staticfiles import StaticFiles
+    import os as _os
+    import httpx as _httpx
+    from fastapi import Request as _Req
+    from fastapi.responses import Response as _Resp, PlainTextResponse as _PT
+    from starlette.websockets import WebSocket as _WS
 
-    _DIST = None
-    for _cand in ("dist", ".output/public", "build", "out"):
-        _p = Path(INSTALL_ROOT) / _cand
-        if (_p / "index.html").exists():
-            _DIST = _p
-            break
+    _WEB_PORT = _os.environ.get("WEB_INTERNAL_PORT", "").strip()
+    _WEB_BASE = f"http://127.0.0.1:{_WEB_PORT}" if _WEB_PORT else ""
+    _HOP = {"connection","keep-alive","proxy-authenticate","proxy-authorization",
+            "te","trailers","transfer-encoding","upgrade","content-encoding","content-length"}
+    _client = _httpx.AsyncClient(base_url=_WEB_BASE, timeout=60.0) if _WEB_BASE else None
 
-    if _DIST is not None:
-        _INDEX = _DIST / "index.html"
-
-        class _SPA(StaticFiles):
-            async def get_response(self, path, scope):
-                try:
-                    return await super().get_response(path, scope)
-                except Exception:
-                    if _INDEX.exists():
-                        return FileResponse(str(_INDEX))
-                    raise
-
-        app.mount("/", _SPA(directory=str(_DIST), html=True), name="spa")
-    else:
-        @app.get("/")
-        def _no_spa():
-            return PlainTextResponse(
-                "SPA build not found. Run: autoscript update\n",
-                status_code=503,
-            )
+    @app.api_route("/{full_path:path}", methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS","HEAD"], include_in_schema=False)
+    async def _spa_proxy(full_path: str, request: _Req):
+        if not _client:
+            return _PT("Web server not configured. Run: autoscript update\n", status_code=503)
+        url = "/" + full_path
+        if request.url.query:
+            url += "?" + request.url.query
+        headers = {k: v for k, v in request.headers.items() if k.lower() not in _HOP}
+        headers["x-forwarded-proto"] = "https"
+        headers["x-forwarded-host"] = request.headers.get("host", "")
+        try:
+            body = await request.body()
+            r = await _client.request(request.method, url, headers=headers, content=body)
+        except Exception as _e:
+            return _PT(f"Web server unreachable: {_e}\nTry: systemctl restart autoscript-web\n", status_code=502)
+        out_headers = [(k, v) for k, v in r.headers.items() if k.lower() not in _HOP]
+        return _Resp(content=r.content, status_code=r.status_code, headers=dict(out_headers),
+                     media_type=r.headers.get("content-type"))
 except Exception as _e:
-    print(f"spa-mount-failed: {_e}", flush=True)
+    print(f"web-proxy-init-failed: {_e}", flush=True)
+
 

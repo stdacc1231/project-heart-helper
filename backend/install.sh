@@ -49,6 +49,10 @@ ensure_node22() {
 }
 build_web_ui() {
   cd "$INSTALL_ROOT"
+  # Build a Node-server bundle we can run under systemd + reverse-proxy from
+  # FastAPI (TanStack Start's default Cloudflare worker output isn't runnable
+  # standalone on a VPS).
+  export NITRO_PRESET=node-server
   if command -v bun >/dev/null 2>&1 && [[ -f bun.lock || -f bun.lockb ]]; then
     bun install --production=false
     bun run build
@@ -60,22 +64,14 @@ build_web_ui() {
     fi
     npm run build
   fi
-  # Normalise the SPA output into "$INSTALL_ROOT/dist" so the FastAPI agent
-  # can serve it regardless of which framework/build tool produced it.
-  local src=""
-  for cand in dist .output/public build out; do
-    if [[ -f "$INSTALL_ROOT/$cand/index.html" ]]; then src="$INSTALL_ROOT/$cand"; break; fi
-  done
-  if [[ -z "$src" ]]; then
-    warn "No index.html found in dist/.output/public/build/out — SPA will not load."
-    return 1
+  if [[ -f "$INSTALL_ROOT/.output/server/index.mjs" ]]; then
+    ok "Web server bundle at $INSTALL_ROOT/.output/server/index.mjs"
+    return 0
   fi
-  if [[ "$src" != "$INSTALL_ROOT/dist" ]]; then
-    rm -rf "$INSTALL_ROOT/dist"
-    cp -a "$src" "$INSTALL_ROOT/dist"
-  fi
-  ok "SPA staged at $INSTALL_ROOT/dist (from ${src#$INSTALL_ROOT/})"
+  warn "Node server bundle not found at .output/server/index.mjs — panel will not load."
+  return 1
 }
+
 # Read from the controlling terminal so `bash <(curl ...)` still works
 # (otherwise stdin is the piped script and every `read` hits EOF).
 if { exec 3</dev/tty; } 2>/dev/null; then :; else exec 3<&0; fi
@@ -214,6 +210,8 @@ say "Writing agent config"
 JWT_SECRET=$(openssl rand -hex 32)
 BOT_INTERNAL_TOKEN=$(openssl rand -hex 32)
 GATE_SECRET=$(openssl rand -hex 32)
+# random local-only port for the Node web server (FastAPI reverse-proxies to it)
+WEB_INTERNAL_PORT=$(( ( RANDOM % 20000 ) + 20000 ))
 
 # passlib bcrypt (matches the agent's verifier)
 python3 -m venv "$INSTALL_ROOT/backend/.venv"
@@ -239,6 +237,7 @@ UPLOAD_DIR=${CONF_DIR}/uploads
 AGENT_URL=https://127.0.0.1:${PANEL_PORT}
 CERT_FULLCHAIN=${CERT_DIR}/fullchain.pem
 CERT_KEY=${CERT_DIR}/privkey.pem
+WEB_INTERNAL_PORT=${WEB_INTERNAL_PORT}
 EOF
 chmod 600 "$CONF_DIR/agent.env"
 
@@ -284,8 +283,9 @@ install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-ssh-ws.service"   /etc/
 install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-bot.service"      /etc/systemd/system/
 install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-ip-limit.service" /etc/systemd/system/
 install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-ip-limit.timer"   /etc/systemd/system/
+install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-web.service"      /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now autoscript-agent autoscript-ssh-ws autoscript-bot autoscript-ip-limit.timer
+systemctl enable --now autoscript-agent autoscript-ssh-ws autoscript-bot autoscript-ip-limit.timer autoscript-web
 
 # --------------------------------------------------------------------------
 if [[ -x "$INSTALL_ROOT/backend/scripts/setup_xray.sh" ]]; then

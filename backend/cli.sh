@@ -40,7 +40,7 @@ con.commit(); con.close()
 PY
 }
 restart_stack() {
-  systemctl restart autoscript-agent autoscript-ssh-ws autoscript-bot 2>/dev/null || true
+  systemctl restart autoscript-agent autoscript-ssh-ws autoscript-bot autoscript-web 2>/dev/null || true
   systemctl reload-or-restart nginx 2>/dev/null || true
 }
 # Read from the controlling terminal so commands still work with piped/stdin use.
@@ -74,6 +74,7 @@ ensure_node22() {
 }
 build_web_ui() {
   cd "$INSTALL_ROOT" || die "Install dir missing."
+  export NITRO_PRESET=node-server
   if command -v bun >/dev/null 2>&1 && [[ -f bun.lock || -f bun.lockb ]]; then
     bun install --production=false && bun run build
   else
@@ -84,17 +85,14 @@ build_web_ui() {
     fi
     npm run build
   fi
-  local src=""
-  for cand in dist .output/public build out; do
-    if [[ -f "$INSTALL_ROOT/$cand/index.html" ]]; then src="$INSTALL_ROOT/$cand"; break; fi
-  done
-  [[ -n "$src" ]] || { warn "No index.html in dist/.output/public/build/out"; return 1; }
-  if [[ "$src" != "$INSTALL_ROOT/dist" ]]; then
-    rm -rf "$INSTALL_ROOT/dist"
-    cp -a "$src" "$INSTALL_ROOT/dist"
+  if [[ -f "$INSTALL_ROOT/.output/server/index.mjs" ]]; then
+    ok "Web server bundle at $INSTALL_ROOT/.output/server/index.mjs"
+    return 0
   fi
-  ok "SPA staged at $INSTALL_ROOT/dist"
+  warn "Node server bundle not found at .output/server/index.mjs"
+  return 1
 }
+
 
 # ---------- actions ----------
 show_status() {
@@ -105,7 +103,7 @@ show_status() {
   echo "${BLD}Repo${RST}        : ${REPO_URL:-<none>}"
   echo "${BLD}Install dir${RST} : ${INSTALL_ROOT}"
   echo
-  for u in autoscript-agent autoscript-ssh-ws autoscript-bot nginx fail2ban; do
+  for u in autoscript-agent autoscript-web autoscript-ssh-ws autoscript-bot nginx fail2ban; do
     printf "  %-22s %s\n" "$u" "$(systemctl is-active "$u" 2>/dev/null || echo inactive)"
   done
   echo
@@ -205,9 +203,21 @@ update_now() {
   git reset --hard origin/main
   if [[ -f backend/scripts/migrate.sh ]]; then bash backend/scripts/migrate.sh || warn "migrate failed"; fi
   "$INSTALL_ROOT/backend/.venv/bin/pip" install -q -r "$INSTALL_ROOT/backend/agent/requirements.txt" || true
+  # Backfill WEB_INTERNAL_PORT for pre-existing installs
+  if ! grep -q '^WEB_INTERNAL_PORT=' /etc/autoscript/agent.env 2>/dev/null; then
+    local p=$(( ( RANDOM % 20000 ) + 20000 ))
+    echo "WEB_INTERNAL_PORT=$p" >> /etc/autoscript/agent.env
+    say "Assigned internal web port $p"
+  fi
+  # Install/refresh the web systemd unit
+  if [[ -f "$INSTALL_ROOT/backend/systemd/autoscript-web.service" ]]; then
+    install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-web.service" /etc/systemd/system/
+    systemctl daemon-reload
+    systemctl enable autoscript-web >/dev/null 2>&1 || true
+  fi
   say "Rebuilding web UI"
   ensure_node22
-  build_web_ui || warn "SPA rebuild failed"
+  build_web_ui || warn "Web rebuild failed"
   restart_stack
   ok "Updated to latest main."
 }
