@@ -21,6 +21,13 @@ if (!entryPath) {
 
 const mod = await import(pathToFileURL(entryPath).href);
 const handler = mod.default?.fetch ? mod.default : mod.default ?? mod;
+
+// Nitro's real node-server preset starts its own HTTP server as a side-effect
+// and exports `{}`. In that case this launcher only needs to import it.
+if (typeof handler.fetch !== "function" && entryPath.includes("/.output/")) {
+  console.log(`Autoscript web server started using ${entryPath}`);
+}
+else {
 const executionContext = {
   waitUntil(promise) {
     Promise.resolve(promise).catch((error) => console.error(error));
@@ -73,3 +80,4 @@ createServer(async (req, res) => {
 }).listen(port, host, () => {
   console.log(`Autoscript web server listening on http://${host}:${port} using ${entryPath}`);
 });
+}
