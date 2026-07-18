@@ -67,5 +67,7 @@ awk -v tls="$TLS_LISTENS" -v plain="$PLAIN_LISTENS" '
 rm -f "$TMP"
 ln -sf /etc/nginx/sites-available/autoscript-panel.conf /etc/nginx/sites-enabled/autoscript-panel.conf
 
-nginx -t && systemctl reload nginx
+nginx -t
+systemctl reload-or-restart nginx
+systemctl restart xray 2>/dev/null || true
 echo "apply_settings: domain=$DOMAIN hosts='$EXTRA_HOSTS' tls=$TLS_PORTS plain=$PLAIN_PORTS"

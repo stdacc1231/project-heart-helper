@@ -1,9 +1,9 @@
-# Autoscript panel — Nginx template.
-# apply_settings.sh renders this per install/settings-save:
-#   __SERVER_NAMES__      -> space-separated panel domain + per-protocol hosts
-#   __TLS_LISTENS__       -> "listen 443 ssl http2;\n listen 2053 ssl http2;\n ..."
-#   __PLAIN_LISTENS__     -> "listen 80;\n listen 8080;\n ..."
-#   __ROOT__ __CERT__     -> install paths
+# Autoscript panel — Nginx template. Rendered by apply_settings.sh.
+# Placeholders (documented without literal tokens so awk/sed do not touch them):
+#   SERVER_NAMES  -> space-separated panel domain + per-protocol hosts
+#   TLS_LISTENS   -> listen directives for every TLS port
+#   PLAIN_LISTENS -> listen directives for every plain port
+#   ROOT / CERT   -> install and cert paths
 #
 # Key rules:
 #   - Every listener serves the SAME vhost (panel + SSH-WS + xray + /sub/).
