@@ -22,7 +22,7 @@ ${RED}This will REMOVE:${RST}
 
 Databases and cert renewals will be lost. Type ${YLW}REMOVE${RST} to continue:
 BANNER
-read -r CONFIRM
+if [[ -r /dev/tty ]]; then IFS= read -r CONFIRM </dev/tty || CONFIRM=""; else IFS= read -r CONFIRM || CONFIRM=""; fi
 [[ "$CONFIRM" == "REMOVE" ]] || die "Aborted."
 
 # ---------------------------------------------------------------
