@@ -49,6 +49,10 @@ ensure_node22() {
 }
 build_web_ui() {
   cd "$INSTALL_ROOT"
+  # Build a Node-server bundle we can run under systemd + reverse-proxy from
+  # FastAPI (TanStack Start's default Cloudflare worker output isn't runnable
+  # standalone on a VPS).
+  export NITRO_PRESET=node-server
   if command -v bun >/dev/null 2>&1 && [[ -f bun.lock || -f bun.lockb ]]; then
     bun install --production=false
     bun run build
@@ -60,22 +64,14 @@ build_web_ui() {
     fi
     npm run build
   fi
-  # Normalise the SPA output into "$INSTALL_ROOT/dist" so the FastAPI agent
-  # can serve it regardless of which framework/build tool produced it.
-  local src=""
-  for cand in dist .output/public build out; do
-    if [[ -f "$INSTALL_ROOT/$cand/index.html" ]]; then src="$INSTALL_ROOT/$cand"; break; fi
-  done
-  if [[ -z "$src" ]]; then
-    warn "No index.html found in dist/.output/public/build/out — SPA will not load."
-    return 1
+  if [[ -f "$INSTALL_ROOT/.output/server/index.mjs" ]]; then
+    ok "Web server bundle at $INSTALL_ROOT/.output/server/index.mjs"
+    return 0
   fi
-  if [[ "$src" != "$INSTALL_ROOT/dist" ]]; then
-    rm -rf "$INSTALL_ROOT/dist"
-    cp -a "$src" "$INSTALL_ROOT/dist"
-  fi
-  ok "SPA staged at $INSTALL_ROOT/dist (from ${src#$INSTALL_ROOT/})"
+  warn "Node server bundle not found at .output/server/index.mjs — panel will not load."
+  return 1
 }
+
 # Read from the controlling terminal so `bash <(curl ...)` still works
 # (otherwise stdin is the piped script and every `read` hits EOF).
 if { exec 3</dev/tty; } 2>/dev/null; then :; else exec 3<&0; fi
