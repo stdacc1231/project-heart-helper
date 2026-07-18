@@ -865,6 +865,18 @@ def bot_payment_create(inp: PaymentBotIn, _: None = Depends(require_internal)):
 # ---- Settings --------------------------------------------------------------
 @app.get("/settings")
 def settings_get(_: str = Depends(require_auth)):
+    tls_ports = [int(p) for p in kv_get("panel.tlsPorts", "443,2053,2083,2087,2096,8443").replace(" ", ",").split(",") if p.strip().isdigit()]
+    plain_ports = [int(p) for p in kv_get("panel.plainPorts", "80,8080,8880,2052,2082,2086,2095").replace(" ", ",").split(",") if p.strip().isdigit()]
+    endpoints: dict[str, dict[str, Any]] = {}
+    for proto in ("ssh", "vmess", "vless", "trojan"):
+        host = kv_get(f"hosts.{proto}", "")
+        port = kv_get(f"ports.{proto}", "")
+        ep: dict[str, Any] = {}
+        if host:
+            ep["host"] = host
+        if port.isdigit():
+            ep["port"] = int(port)
+        endpoints[proto] = ep
     return {
         "domain": PANEL_DOMAIN,
         "port": PANEL_PORT,
@@ -873,6 +885,9 @@ def settings_get(_: str = Depends(require_auth)):
         "rootDomain": kv_get("panel.rootDomain", ""),
         "dbPath": DB_PATH,
         "repoUrl": REPO_URL,
+        "tlsPorts": tls_ports,
+        "plainPorts": plain_ports,
+        "endpoints": endpoints,
     }
 
 
@@ -881,7 +896,40 @@ def settings_save(inp: SettingsIn, user: str = Depends(require_auth)):
     changed = {}
     for k in ("domain", "port", "tlsMode", "dnsProvider", "rootDomain", "repoUrl"):
         v = getattr(inp, k)
-        if v is not None: kv_set(f"panel.{k}", str(v)); changed[k] = v
+        if v is not None:
+            if k == "domain":
+                update_env_value("PANEL_DOMAIN", str(v).strip())
+            elif k == "port":
+                if int(v) < 1 or int(v) > 65535:
+                    raise HTTPException(400, "Invalid panel port")
+                update_env_value("PANEL_PORT", str(v))
+            elif k == "repoUrl":
+                update_env_value("REPO_URL", str(v).strip())
+            kv_set(f"panel.{k}", str(v).strip() if isinstance(v, str) else str(v)); changed[k] = v
+    cf_tls = {443, 2053, 2083, 2087, 2096, 8443}
+    cf_plain = {80, 8080, 8880, 2052, 2082, 2086, 2095}
+    if inp.tlsPorts is not None:
+        ports = sorted({int(p) for p in inp.tlsPorts if int(p) in cf_tls})
+        if not ports:
+            raise HTTPException(400, "At least one TLS port is required")
+        kv_set("panel.tlsPorts", ",".join(map(str, ports))); changed["tlsPorts"] = ports
+    if inp.plainPorts is not None:
+        ports = sorted({int(p) for p in inp.plainPorts if int(p) in cf_plain})
+        kv_set("panel.plainPorts", ",".join(map(str, ports))); changed["plainPorts"] = ports
+    if inp.endpoints is not None:
+        for proto in ("ssh", "vmess", "vless", "trojan"):
+            ep = inp.endpoints.get(proto) or {}
+            host = str(ep.get("host") or "").strip()
+            port = ep.get("port")
+            kv_set(f"hosts.{proto}", host)
+            if port in (None, ""):
+                kv_set(f"ports.{proto}", "")
+            else:
+                p = int(port)
+                if p < 1 or p > 65535:
+                    raise HTTPException(400, f"Invalid {proto} port")
+                kv_set(f"ports.{proto}", str(p))
+        changed["endpoints"] = inp.endpoints
     apply = Path(INSTALL_ROOT) / "backend" / "scripts" / "apply_settings.sh"
     if apply.exists():
         subprocess.Popen(["bash", str(apply)])
