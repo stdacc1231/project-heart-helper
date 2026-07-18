@@ -82,34 +82,72 @@ reset_admin_user() {
 }
 
 reset_admin_password() {
-  read -rsp "New admin password: " p1; echo
-  read -rsp "Repeat password : " p2; echo
-  [[ "$p1" == "$p2" && ${#p1} -ge 6 ]] || die "Passwords do not match or too short (min 6)."
+  read -rsp "New admin password (blank to auto-generate): " p1; echo
+  local auto=0
+  if [[ -z "$p1" ]]; then
+    p1=$(rand_pass); auto=1
+  else
+    read -rsp "Repeat password : " p2; echo
+    [[ "$p1" == "$p2" && ${#p1} -ge 6 ]] || die "Passwords do not match or too short (min 6)."
+  fi
   local hash
-  hash=$("$VENV_PY" -c "from passlib.hash import bcrypt; import sys; print(bcrypt.hash(sys.argv[1]))" "$p1")
+  hash=$("$VENV_PY" -c "from passlib.hash import argon2; import sys; print(argon2.hash(sys.argv[1]))" "$p1")
   set_env ADMIN_HASH "'$hash'"
   set_setting "admin.hash" "$hash"
   restart_stack
   ok "Admin password updated."
+  [[ $auto -eq 1 ]] && echo "  New password: ${BLD}${p1}${RST}"
+}
+
+change_panel_port() {
+  local old="$PANEL_PORT" new
+  echo "Current panel port: ${old}"
+  read -rp "New port (blank = auto-random, must avoid CF ports): " new
+  if [[ -z "$new" ]]; then
+    new=$(pick_port)
+  else
+    [[ "$new" =~ ^[0-9]+$ ]] || die "Port must be numeric."
+    for cf in $CF_PORTS_ALL; do [[ "$new" -eq "$cf" ]] && die "Port $new is a Cloudflare/Nginx VPN port."; done
+  fi
+  set_env PANEL_PORT "$new"
+  set_setting "panel.port" "$new"
+  ufw allow "${new}/tcp" comment 'autoscript-panel' >/dev/null 2>&1 || true
+  ufw delete allow "${old}/tcp" >/dev/null 2>&1 || true
+  systemctl restart autoscript-agent
+  ok "Panel now listens on port ${new}. URL: https://${PANEL_DOMAIN}:${new}/${PANEL_PATH:-}/"
+}
+
+change_panel_path() {
+  echo "Current secret path: /${PANEL_PATH:-<none>}/"
+  read -rp "New path slug (blank = regenerate random, '-' to disable): " p
+  if [[ -z "$p" ]]; then p=$(rand_slug 14)
+  elif [[ "$p" == "-" ]]; then p=""
+  else
+    [[ "$p" =~ ^[a-zA-Z0-9_-]{4,40}$ ]] || die "Path must be 4-40 chars: letters, digits, _ or -"
+  fi
+  set_env PANEL_PATH "$p"
+  set_setting "panel.path" "$p"
+  systemctl restart autoscript-agent
+  if [[ -n "$p" ]]; then
+    ok "Panel URL: https://${PANEL_DOMAIN}:${PANEL_PORT}/${p}/"
+  else
+    ok "Secret path disabled. Panel URL: https://${PANEL_DOMAIN}:${PANEL_PORT}/"
+  fi
 }
 
 change_panel_domain() {
   read -rp "New panel domain (current: $PANEL_DOMAIN): " d
   [[ -n "$d" ]] || die "Domain required."
-  read -rp "HTTPS port [${PANEL_PORT}]: " port
-  port=${port:-$PANEL_PORT}
   echo "TLS mode:  1) single-domain  2) wildcard"
   read -rp "Choose [1-2, current mode kept if blank]: " mode
   set_env PANEL_DOMAIN "$d"
-  set_env PANEL_PORT   "$port"
   set_setting "panel.domain" "$d"
-  set_setting "panel.port"   "$port"
   [[ "$mode" == "1" ]] && set_setting "panel.tlsMode" "single"
   [[ "$mode" == "2" ]] && set_setting "panel.tlsMode" "wildcard"
   say "Re-issuing TLS + reloading nginx…"
   bash "$INSTALL_ROOT/backend/scripts/apply_settings.sh"
   restart_stack
-  ok "Panel domain is now https://${d}:${port}"
+  ok "Panel domain is now https://${d}:${PANEL_PORT}/${PANEL_PATH:-}/"
 }
 
 change_repo_url() {
