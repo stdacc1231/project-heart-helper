@@ -328,17 +328,29 @@ def update_env_value(key: str, value: str) -> None:
     env_path.write_text("\n".join(out) + "\n")
 
 
+def _col(r: sqlite3.Row, key: str, default=None):
+    try:
+        return r[key]
+    except (IndexError, KeyError):
+        return default
+
+
 def row_to_account(r: sqlite3.Row) -> dict:
     return {
-        "id": r["id"], "protocol": r["protocol"], "username": r["username"],
-        "password": r["password"], "uuid": r["uuid"],
-        "createdAt": r["created_at"], "expiresAt": r["expires_at"],
-        "ipLimit": r["ip_limit"],
-        "speedUpKbps": r["speed_up_kbps"], "speedDnKbps": r["speed_dn_kbps"],
-        "quotaGb": r["quota_gb"], "usedBytes": r["used_bytes"], "online": 0,
-        "status": r["status"], "telegramId": r["telegram_id"], "planId": r["plan_id"],
-        "note": r["note"],
+        "id": _col(r, "id"), "protocol": _col(r, "protocol", "ssh"),
+        "username": _col(r, "username", ""),
+        "password": _col(r, "password"), "uuid": _col(r, "uuid"),
+        "createdAt": _col(r, "created_at", ""), "expiresAt": _col(r, "expires_at", ""),
+        "ipLimit": _col(r, "ip_limit", 0),
+        "speedUpKbps": _col(r, "speed_up_kbps", 0),
+        "speedDnKbps": _col(r, "speed_dn_kbps", 0),
+        "quotaGb": _col(r, "quota_gb", 0),
+        "usedBytes": _col(r, "used_bytes", 0), "online": 0,
+        "status": _col(r, "status", "active"),
+        "telegramId": _col(r, "telegram_id"), "planId": _col(r, "plan_id"),
+        "note": _col(r, "note"),
     }
+
 
 
 def row_to_plan(r: sqlite3.Row) -> dict:
