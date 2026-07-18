@@ -52,15 +52,29 @@ build_web_ui() {
   if command -v bun >/dev/null 2>&1 && [[ -f bun.lock || -f bun.lockb ]]; then
     bun install --production=false
     bun run build
-    return
-  fi
-
-  if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
-    npm ci --no-audit --no-fund
   else
-    npm install --no-audit --no-fund
+    if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
+      npm ci --no-audit --no-fund
+    else
+      npm install --no-audit --no-fund
+    fi
+    npm run build
   fi
-  npm run build
+  # Normalise the SPA output into "$INSTALL_ROOT/dist" so the FastAPI agent
+  # can serve it regardless of which framework/build tool produced it.
+  local src=""
+  for cand in dist .output/public build out; do
+    if [[ -f "$INSTALL_ROOT/$cand/index.html" ]]; then src="$INSTALL_ROOT/$cand"; break; fi
+  done
+  if [[ -z "$src" ]]; then
+    warn "No index.html found in dist/.output/public/build/out — SPA will not load."
+    return 1
+  fi
+  if [[ "$src" != "$INSTALL_ROOT/dist" ]]; then
+    rm -rf "$INSTALL_ROOT/dist"
+    cp -a "$src" "$INSTALL_ROOT/dist"
+  fi
+  ok "SPA staged at $INSTALL_ROOT/dist (from ${src#$INSTALL_ROOT/})"
 }
 # Read from the controlling terminal so `bash <(curl ...)` still works
 # (otherwise stdin is the piped script and every `read` hits EOF).
