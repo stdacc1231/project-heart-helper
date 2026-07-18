@@ -1,0 +1,82 @@
+# Autoscript — All-in-One VPN Panel
+
+Modern web panel for managing **SSH-WS, VMess, VLESS, VLESS-Reality, Trojan,
+Trojan-Go, ShadowSocks, ShadowSocks-R and Hysteria2** on a single VPS.
+Built as a TanStack Start web UI on top of a Python (FastAPI) agent that
+drives the same battle-tested provisioning scripts the CLI used to run.
+
+- Full menu parity with the old bash CLI, in a clean dark "Aurora Ops" UI.
+- SSH-WebSocket fixed on path `/` (HTTP/1.1 compatible, CDN-safe).
+- Multi-port listener for every Cloudflare-supported TLS + plain port.
+- One panel domain, plus per-protocol host overrides in Settings.
+- Per-user speed limit (up/down), quota, IP limit, expiry, QR + sub link.
+- Live connections view (kick), hourly traffic graphs, audit log, backups.
+- Telegram bot handles **all sales**: payment proof upload → admin approve
+  → account auto-created → config + QR delivered in chat.
+- 2FA (TOTP) for admin login, browser terminal (xterm.js → agent PTY),
+  invoice PDFs, PWA + push notifications.
+- One-click self-update from this GitHub repo.
+
+## Repo layout
+
+```
+backend/     # Everything that runs on the VPS (installer, agent, scripts)
+src/         # Web UI (TanStack Start, React 19)
+```
+
+The `backend/` folder is what the installer deploys to `/opt/autoscript`
+on your server. The web UI is built and served by Nginx on the panel domain.
+
+## Install (fresh Ubuntu 22.04+ / Debian 12, as root)
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/stdacc1231/project-heart-helper/main/backend/install.sh)
+```
+
+The installer will ask for:
+
+1. **Panel domain** (e.g. `panel.example.com`)
+2. **Primary HTTPS port** (default `443`)
+3. **TLS mode** — `1` single-domain (HTTP-01) or `2` wildcard (DNS-01 via
+   acme.sh; you'll be asked for your DNS provider API creds)
+4. **Admin username + password** for the panel
+5. **DB path** (default `/etc/autoscript/db.sqlite`)
+6. **Telegram bot token + admin chat id** (optional — leave blank to skip)
+
+It then:
+
+- Installs xray-core, ssh-ws, nginx, python agent, systemd units.
+- Issues TLS certs and symlinks them into xray so the panel and every
+  protocol share the same fullchain.
+- Opens all Cloudflare-supported ports (TLS: 443,2053,2083,2087,2096,8443
+  · plain: 80,8080,8880,2052,2082,2086,2095).
+- Purges any pre-existing Cloudflare WARP / Zero Trust install.
+
+## Uninstall
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/stdacc1231/project-heart-helper/main/backend/uninstall.sh)
+```
+
+## Self-update
+
+Push to `main` on this repo, then in the panel open **Update → Pull &
+Rebuild**. The agent runs `git fetch && git reset --hard origin/main`
+inside `/opt/autoscript`, applies migrations, and restarts services. The
+web UI bundle is committed under `dist/` so the VPS never needs Node.
+
+## Per-protocol domains
+
+The installer requests **one** panel domain used for TLS. In **Settings →
+Protocol endpoints** you can override host/port per protocol (VMess on
+`vm.example.com:2083`, Trojan on `tr.example.com:443`, etc). Hit **Apply**
+and the agent re-issues certs and reloads nginx + xray.
+
+## Docs
+
+- Backend detail: [`backend/README.md`](backend/README.md)
+- Docs site: <https://docs.lovable.dev>
+
+## License
+
+Private / personal use. Do not redistribute without the author's consent.

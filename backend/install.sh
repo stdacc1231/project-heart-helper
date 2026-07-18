@@ -11,7 +11,7 @@ die()  { printf '%s\n' "${RED}[err]${RST} $*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Please run as root."
 
-REPO_DEFAULT="https://github.com/your-user/autoscript.git"
+REPO_DEFAULT="https://github.com/stdacc1231/project-heart-helper.git"
 INSTALL_ROOT="/opt/autoscript"
 CONF_DIR="/etc/autoscript"
 DB_DEFAULT="${CONF_DIR}/db.sqlite"
