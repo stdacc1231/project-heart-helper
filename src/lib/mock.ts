@@ -350,13 +350,6 @@ export const mock = {
   async listInvoices() { return load().invoices; },
   async sendInvoice(id: string, via: "email" | "telegram") { await wait(400); const db = load(); const inv = db.invoices.find((x) => x.id === id); audit(db, "invoice.send", `Sent invoice ${inv?.number} via ${via}`); save(db); return { ok: true as const }; },
 
-  async listResellers() { return load().resellers; },
-  async saveReseller(r: Partial<Reseller>) {
-    const db = load();
-    if (r.id) { const ex = db.resellers.find((x) => x.id === r.id); if (!ex) throw new Error("Not found"); Object.assign(ex, r); save(db); return ex; }
-    const created: Reseller = { id: "r-" + Date.now(), name: r.name ?? "Reseller", telegramId: r.telegramId, balanceCents: r.balanceCents ?? 0, quotaUsers: r.quotaUsers ?? 10, usersCreated: 0, active: r.active ?? true, createdAt: new Date().toISOString() };
-    db.resellers.unshift(created); save(db); return created;
-  },
 
   // Plans, payments, bot, settings, logs
   async listPlans() { return load().plans; },
