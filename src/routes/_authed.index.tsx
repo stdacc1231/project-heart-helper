@@ -29,8 +29,17 @@ function Stat({ icon: Icon, label, value, sub }: { icon: any; label: string; val
   );
 }
 
+type TrafficRange = "24h" | "7d" | "30d" | "365d";
+
+const RANGE_LABELS: Record<TrafficRange, string> = {
+  "24h": "Daily",
+  "7d": "Weekly",
+  "30d": "Monthly",
+  "365d": "Yearly",
+};
+
 function DashboardPage() {
-  const [range, setRange] = useState<"1h" | "24h" | "7d">("24h");
+  const [range, setRange] = useState<TrafficRange>("24h");
   const { data: s } = useQuery({ queryKey: ["status"], queryFn: () => api.system.status(), refetchInterval: 5000 });
   const { data: accounts } = useQuery({ queryKey: ["accounts"], queryFn: () => api.accounts.list() });
   const { data: traffic } = useQuery({ queryKey: ["traffic", range], queryFn: () => api.system.traffic(range), refetchInterval: 30000 });
@@ -38,8 +47,11 @@ function DashboardPage() {
   const online = accounts?.reduce((a, x) => a + x.online, 0) ?? 0;
   const totalUsage = accounts?.reduce((a, x) => a + x.usedBytes, 0) ?? 0;
 
+  const periodRx = (traffic ?? []).reduce((sum, p) => sum + p.rxBytes, 0);
+  const periodTx = (traffic ?? []).reduce((sum, p) => sum + p.txBytes, 0);
+
   const chartData = (traffic ?? []).map((p) => ({
-    time: range === "7d"
+    time: range !== "24h"
       ? new Date(p.t).toLocaleDateString([], { weekday: "short", hour: "2-digit" })
       : new Date(p.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     rx: +(p.rxBytes / 1024 ** 3).toFixed(2),
@@ -52,7 +64,13 @@ function DashboardPage() {
         <Stat icon={Activity} label="Uptime" value={s ? formatDuration(s.uptimeSeconds) : "—"} sub={s?.hostname} />
         <Stat icon={Users} label="Users online" value={String(online)} sub={`${accounts?.length ?? 0} total`} />
         <Stat icon={Wifi} label="Network" value={s ? `${s.netRxMbps.toFixed(1)} / ${s.netTxMbps.toFixed(1)} Mbps` : "—"} sub="Rx / Tx" />
-        <Stat icon={HardDrive} label="Traffic" value={formatBytes(totalUsage)} sub="This period" />
+        <Stat icon={HardDrive} label="Total account usage" value={formatBytes(totalUsage)} sub="All users" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} download`} value={formatBytes(periodRx)} sub="Selected period" />
+        <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} upload`} value={formatBytes(periodTx)} sub="Selected period" />
+        <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} total`} value={formatBytes(periodRx + periodTx)} sub="Download + upload" />
       </div>
 
       <Card className="p-4">
@@ -60,9 +78,10 @@ function DashboardPage() {
           <h3 className="text-sm font-medium">Traffic</h3>
           <Tabs value={range} onValueChange={(v) => setRange(v as any)}>
             <TabsList>
-              <TabsTrigger value="1h">1h</TabsTrigger>
-              <TabsTrigger value="24h">24h</TabsTrigger>
-              <TabsTrigger value="7d">7d</TabsTrigger>
+              <TabsTrigger value="24h">Daily</TabsTrigger>
+              <TabsTrigger value="7d">Weekly</TabsTrigger>
+              <TabsTrigger value="30d">Monthly</TabsTrigger>
+              <TabsTrigger value="365d">Yearly</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
