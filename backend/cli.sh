@@ -44,7 +44,7 @@ restart_stack() {
   systemctl reload-or-restart nginx 2>/dev/null || true
 }
 # Read from the controlling terminal so commands still work with piped/stdin use.
-if [[ -r /dev/tty ]]; then exec 3</dev/tty; else exec 3<&0; fi
+if { exec 3</dev/tty; } 2>/dev/null; then :; else exec 3<&0; fi
 ask()    { local __v; IFS= read -r -u 3 -p "$1" __v || __v=""; printf -v "$2" '%s' "$__v"; }
 ask_pw() { local __v; IFS= read -r -s -u 3 -p "$1" __v || __v=""; echo; printf -v "$2" '%s' "$__v"; }
 rand_chars() { local chars=$1 n=$2 out=""; while [[ ${#out} -lt $n ]]; do out+=$(LC_ALL=C tr -dc "$chars" </dev/urandom | head -c "$((n-${#out}))" || true); done; printf '%s' "$out"; }

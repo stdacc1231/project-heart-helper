@@ -37,7 +37,7 @@ pick_port() {
 }
 # Read from the controlling terminal so `bash <(curl ...)` still works
 # (otherwise stdin is the piped script and every `read` hits EOF).
-if [[ -r /dev/tty ]]; then exec 3</dev/tty; else exec 3<&0; fi
+if { exec 3</dev/tty; } 2>/dev/null; then :; else exec 3<&0; fi
 ask()    { local __v; IFS= read -r -u 3 -p "$1" __v || __v=""; printf -v "$2" '%s' "$__v"; }
 ask_pw() { local __v; IFS= read -r -s -u 3 -p "$1" __v || __v=""; echo; printf -v "$2" '%s' "$__v"; }
 
