@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { api, formatBytes, PROTOCOL_LABELS } from "@/lib/api";
+import { api, formatBytes, PROTOCOL_LABELS, type ConnectionProfile } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/u/$id")({
@@ -56,8 +56,20 @@ function UserStatusPage() {
       <div className="mt-3 grid gap-3 md:grid-cols-3">
         <Metric icon={HardDrive} label="Today" value={formatBytes(dailyBytes)} sub="Download + upload" />
         <Metric icon={HardDrive} label="This month" value={formatBytes(monthlyBytes)} sub="Download + upload" />
-        <Metric icon={ShieldCheck} label="Login user" value={a.protocol === "ssh" ? `grvpn-${a.username}` : a.username} sub="Use this in your client" />
+        <Metric icon={ShieldCheck} label="Login user" value={data.loginUsername ?? (a.protocol === "ssh" ? `grvpn-${a.username}` : a.username)} sub="Use this in your client" />
       </div>
+
+      <Card className="mt-4 p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-medium">Account limits</h2>
+          <Badge variant="outline">{data.host ?? "default host"}</Badge>
+        </div>
+        <div className="grid gap-2 md:grid-cols-3">
+          <Info label="TLS ports" value={(data.tlsPorts ?? []).join(", ") || "443"} />
+          <Info label="Plain ports" value={(data.plainPorts ?? []).join(", ") || "80"} />
+          <Info label="Online IPs" value={(data.activeIps ?? []).map((x) => x.ip).join(", ") || "None"} />
+        </div>
+      </Card>
 
       <Card className="mt-4 p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -66,6 +78,17 @@ function UserStatusPage() {
         </div>
         <div className="break-all rounded-md border bg-muted/40 p-3 font-mono text-xs">{data.configLink}</div>
         {data.configText && <Textarea readOnly value={data.configText} className="mt-3 min-h-32 font-mono text-xs" />}
+      </Card>
+
+      <Card className="mt-4 p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-medium">All connection settings</h2>
+          <Badge variant="outline">{data.connectionProfiles?.length ?? 0} profiles</Badge>
+        </div>
+        <div className="grid gap-3">
+          {(data.connectionProfiles ?? []).map((p) => <ProfileCard key={`${p.label}-${p.port}`} profile={p} />)}
+          {!data.connectionProfiles?.length && <div className="text-sm text-muted-foreground">No connection profiles available.</div>}
+        </div>
       </Card>
     </Shell>
   );
@@ -85,6 +108,34 @@ function Metric({ icon: Icon, label, value, sub }: { icon: any; label: string; v
       <div className="break-words text-xl font-semibold">{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">{sub}</div>
     </Card>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-muted/30 p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 break-words font-mono text-sm">{value}</div>
+    </div>
+  );
+}
+
+function ProfileCard({ profile }: { profile: ConnectionProfile }) {
+  const copy = async (text: string) => {
+    await navigator.clipboard.writeText(text);
+    toast.success("Copied");
+  };
+  return (
+    <div className="rounded-md border bg-muted/25 p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{profile.label}</Badge>
+          <span className="font-mono text-xs text-muted-foreground">{profile.host}:{profile.port}{profile.path || ""}</span>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => copy(profile.link)}><Copy className="mr-1 h-4 w-4" /> Copy</Button>
+      </div>
+      <div className="break-all rounded border bg-background/40 p-2 font-mono text-xs">{profile.link}</div>
+    </div>
   );
 }
 
