@@ -47,8 +47,9 @@ restart_stack() {
 if [[ -r /dev/tty ]]; then exec 3</dev/tty; else exec 3<&0; fi
 ask()    { local __v; IFS= read -r -u 3 -p "$1" __v || __v=""; printf -v "$2" '%s' "$__v"; }
 ask_pw() { local __v; IFS= read -r -s -u 3 -p "$1" __v || __v=""; echo; printf -v "$2" '%s' "$__v"; }
-rand_slug() { "$VENV_PY" -c 'import secrets,string,sys; n=int(sys.argv[1]); print("".join(secrets.choice(string.ascii_lowercase+string.digits) for _ in range(n)), end="")' "${1:-14}"; }
-rand_pass() { "$VENV_PY" -c 'import secrets,string; chars=string.ascii_letters+string.digits; print("".join(secrets.choice(chars) for _ in range(18)), end="")'; }
+rand_chars() { local chars=$1 n=$2 out=""; while [[ ${#out} -lt $n ]]; do out+=$(LC_ALL=C tr -dc "$chars" </dev/urandom | head -c "$((n-${#out}))" || true); done; printf '%s' "$out"; }
+rand_slug() { rand_chars 'a-z0-9' "${1:-14}"; }
+rand_pass() { rand_chars 'A-Za-z0-9' 18; }
 CF_PORTS_ALL="443 2053 2083 2087 2096 8443 80 8080 8880 2052 2082 2086 2095"
 pick_port() {
   local p
