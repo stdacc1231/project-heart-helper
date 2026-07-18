@@ -130,12 +130,6 @@ function seed(): MockDB {
     { id: "w-3", ts: new Date(now - 3_600_000).toISOString(),amountCents:   500, reason: "Refund adjustment", balanceAfterCents: 1200 },
   ];
 
-  const resellers: Reseller[] = [
-    { id: "r-1", name: "Alice",   telegramId: "500000123", balanceCents: 4500, quotaUsers: 50, usersCreated: 12, active: true,  createdAt: new Date(now - 20 * day).toISOString() },
-    { id: "r-2", name: "Rendi",   telegramId: "500000777", balanceCents:  900, quotaUsers: 20, usersCreated:  4, active: true,  createdAt: new Date(now - 10 * day).toISOString() },
-    { id: "r-3", name: "Kenji",   telegramId: "500000456", balanceCents:    0, quotaUsers: 30, usersCreated: 30, active: false, createdAt: new Date(now - 60 * day).toISOString() },
-  ];
-
   const payments: Payment[] = [
     { id: "pay-1", telegramId: "500000123", telegramName: "@alice", planId: "p-basic", planName: "Basic 30d", amountCents: 300, method: "bank",        proofUrl: "https://placehold.co/400x600/0d1220/78e2c4?text=Bank+Slip",  createdAt: new Date(now - 3600_000).toISOString(), status: "pending" },
     { id: "pay-2", telegramId: "500000999", telegramName: "@bob",   planId: "p-pro",   planName: "Pro 30d",   amountCents: 700, method: "crypto_usdt", proofUrl: "https://placehold.co/400x600/0d1220/bda0ff?text=USDT+TxID", createdAt: new Date(now - 7200_000).toISOString(), status: "pending" },
