@@ -76,14 +76,24 @@ build_web_ui() {
   cd "$INSTALL_ROOT" || die "Install dir missing."
   if command -v bun >/dev/null 2>&1 && [[ -f bun.lock || -f bun.lockb ]]; then
     bun install --production=false && bun run build
-    return
-  fi
-  if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
-    npm ci --no-audit --no-fund
   else
-    npm install --no-audit --no-fund
+    if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
+      npm ci --no-audit --no-fund
+    else
+      npm install --no-audit --no-fund
+    fi
+    npm run build
   fi
-  npm run build
+  local src=""
+  for cand in dist .output/public build out; do
+    if [[ -f "$INSTALL_ROOT/$cand/index.html" ]]; then src="$INSTALL_ROOT/$cand"; break; fi
+  done
+  [[ -n "$src" ]] || { warn "No index.html in dist/.output/public/build/out"; return 1; }
+  if [[ "$src" != "$INSTALL_ROOT/dist" ]]; then
+    rm -rf "$INSTALL_ROOT/dist"
+    cp -a "$src" "$INSTALL_ROOT/dist"
+  fi
+  ok "SPA staged at $INSTALL_ROOT/dist"
 }
 
 # ---------- actions ----------
