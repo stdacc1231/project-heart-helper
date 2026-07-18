@@ -34,36 +34,42 @@ pick_port() {
     echo "$p"; return
   done
 }
+# Read from the controlling terminal so `bash <(curl ...)` still works
+# (otherwise stdin is the piped script and every `read` hits EOF).
+if [[ -r /dev/tty ]]; then exec 3</dev/tty; else exec 3<&0; fi
+ask()    { local __v; IFS= read -r -u 3 -p "$1" __v || __v=""; printf -v "$2" '%s' "$__v"; }
+ask_pw() { local __v; IFS= read -r -s -u 3 -p "$1" __v || __v=""; echo; printf -v "$2" '%s' "$__v"; }
 
 # --------------------------------------------------------------------------
 say "Autoscript Web Panel installer"
-read -rp "Panel MAIN domain (e.g. panel.example.com): " PANEL_DOMAIN
+ask "Panel MAIN domain (e.g. panel.example.com): " PANEL_DOMAIN
 [[ -n "$PANEL_DOMAIN" ]] || die "Domain is required."
 
 echo "Certificate mode:"
 echo "  1) Single domain  (HTTP-01)"
 echo "  2) Wildcard       (DNS-01 — needs DNS API creds exported in env)"
-read -rp "Choose [1-2]: " TLS_MODE
+ask "Choose [1-2]: " TLS_MODE
 TLS_MODE=${TLS_MODE:-1}
 
 DNS_API=""; ROOT_DOMAIN=""
 if [[ "$TLS_MODE" == "2" ]]; then
-  read -rp "Root domain for wildcard (e.g. example.com): " ROOT_DOMAIN
-  read -rp "acme.sh DNS module [dns_cf]: " DNS_API
+  ask "Root domain for wildcard (e.g. example.com): " ROOT_DOMAIN
+  ask "acme.sh DNS module [dns_cf]: " DNS_API
   DNS_API=${DNS_API:-dns_cf}
   warn "Export the ${DNS_API} API credentials in this shell before continuing."
 fi
 
-read -rp "Admin username [admin]: " ADMIN_USER
+ask "Admin username [admin]: " ADMIN_USER
 ADMIN_USER=${ADMIN_USER:-admin}
-read -rsp "Admin password (leave blank to auto-generate): " ADMIN_PASS; echo
+ask_pw "Admin password (leave blank to auto-generate): " ADMIN_PASS
 if [[ -z "$ADMIN_PASS" ]]; then
   ADMIN_PASS=$(rand_pass)
   AUTO_PASS=1
 fi
 
-read -rp "Telegram bot token (optional): " BOT_TOKEN
-read -rp "Telegram admin chat ID (optional): " BOT_ADMIN_CHAT
+ask "Telegram bot token (optional, Enter to skip): " BOT_TOKEN
+ask "Telegram admin chat ID (optional, Enter to skip): " BOT_ADMIN_CHAT
+
 
 DB_PATH="$DB_DEFAULT"
 REPO="$REPO_DEFAULT"
