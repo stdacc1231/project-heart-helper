@@ -4,10 +4,10 @@
 set -euo pipefail
 
 RED=$'\e[31m'; GRN=$'\e[32m'; YLW=$'\e[33m'; BLU=$'\e[36m'; BLD=$'\e[1m'; RST=$'\e[0m'
-say(){ printf '%s\n' "${BLU}==>${RST} $*"; }
-ok(){  printf '%s\n' "${GRN}[ok]${RST} $*"; }
-warn(){printf '%s\n' "${YLW}[warn]${RST} $*"; }
-die(){ printf '%s\n' "${RED}[err]${RST} $*" >&2; exit 1; }
+say()  { printf '%s\n' "${BLU}==>${RST} $*"; }
+ok()   { printf '%s\n' "${GRN}[ok]${RST} $*"; }
+warn() { printf '%s\n' "${YLW}[warn]${RST} $*"; }
+die()  { printf '%s\n' "${RED}[err]${RST} $*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Please run as root (sudo autoscript)."
 
