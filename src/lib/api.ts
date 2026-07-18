@@ -190,8 +190,8 @@ export interface Alert {
 
 
 const IS_PREVIEW =
-  typeof window === "undefined" ||
-  /lovable\.(app|dev)$|lovableproject\.com$|localhost/.test(window.location.hostname);
+  typeof window !== "undefined" &&
+  /lovable\.(app|dev)$|lovableproject\.com$|localhost|127\.0\.0\.1/.test(window.location.hostname);
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
