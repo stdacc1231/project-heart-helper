@@ -283,8 +283,9 @@ install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-ssh-ws.service"   /etc/
 install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-bot.service"      /etc/systemd/system/
 install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-ip-limit.service" /etc/systemd/system/
 install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-ip-limit.timer"   /etc/systemd/system/
+install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-web.service"      /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now autoscript-agent autoscript-ssh-ws autoscript-bot autoscript-ip-limit.timer
+systemctl enable --now autoscript-agent autoscript-ssh-ws autoscript-bot autoscript-ip-limit.timer autoscript-web
 
 # --------------------------------------------------------------------------
 if [[ -x "$INSTALL_ROOT/backend/scripts/setup_xray.sh" ]]; then
