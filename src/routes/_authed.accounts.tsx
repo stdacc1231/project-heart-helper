@@ -58,15 +58,6 @@ function AccountsPage() {
     toast.success("Subscription URL copied");
   }
 
-  async function exportCsv() {
-    const { csv } = await api.accounts.exportCsv();
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "autoscript-accounts.csv"; a.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -82,13 +73,7 @@ function AccountsPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search user or Telegram ID…" className="pl-8 w-64" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-          <Button variant="outline" size="sm" onClick={() => importRef.current?.click()}><Upload className="mr-1 h-3.5 w-3.5" /> Import CSV</Button>
-          <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={async (e) => {
-            const f = e.target.files?.[0]; if (!f) return;
-            const text = await f.text(); importCsv.mutate(text);
-            e.target.value = "";
-          }} />
-          <Button variant="outline" size="sm" onClick={exportCsv}><Download className="mr-1 h-3.5 w-3.5" /> Export</Button>
+          <Button variant="outline" size="sm" onClick={() => setTrialOpen(true)}><Clock className="mr-1 h-3.5 w-3.5" /> Trial user</Button>
           <Button onClick={() => setOpen(true)}><Plus className="mr-1 h-4 w-4" /> New account</Button>
         </div>
       </div>
