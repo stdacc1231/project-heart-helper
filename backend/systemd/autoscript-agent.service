@@ -19,6 +19,7 @@ NoNewPrivileges=false
 ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
+ReadWritePaths=/etc/autoscript /opt/autoscript /usr/local/etc/xray /var/log /tmp
 LimitNOFILE=65535
 
 [Install]

@@ -144,9 +144,15 @@ def kv_set(key: str, value: str) -> None:
 
 
 def log(kind: str, action: str, message: str, *, actor="system", target=None, level="info"):
-    with db() as c:
-        c.execute("INSERT INTO logs(ts,type,level,actor,action,target,message) VALUES(?,?,?,?,?,?,?)",
-                  (datetime.now(timezone.utc).isoformat(), kind, level, actor, action, target, message))
+    try:
+        with db() as c:
+            c.execute("INSERT INTO logs(ts,type,level,actor,action,target,message) VALUES(?,?,?,?,?,?,?)",
+                      (datetime.now(timezone.utc).isoformat(), kind, level, actor, action, target, message))
+    except Exception as exc:
+        # Audit logging must never break auth or panel actions.  If the DB is
+        # temporarily read-only/missing, keep the request alive and leave a
+        # journal entry for troubleshooting/fail2ban visibility.
+        print(f"audit-log-failed action={action} error={exc}", flush=True)
 
 
 # ---------------------------------------------------------------------------
