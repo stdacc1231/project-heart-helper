@@ -216,15 +216,17 @@ ${BLD}${BLU}Autoscript Admin CLI${RST}
 ==============================
  1) Show status
  2) Reset admin username
- 3) Reset admin password
- 4) Change panel domain / port / TLS mode
- 5) Change GitHub repo URL
- 6) Update from GitHub (git pull + restart)
- 7) Restart services
- 8) View service logs
- 9) Backup /etc/autoscript + xray config
-10) Set Telegram bot token / admin id
-11) Uninstall panel
+ 3) Reset admin password (blank = auto-generate)
+ 4) Change panel domain / TLS mode
+ 5) Change panel port  (random, avoids Cloudflare/Nginx VPN ports)
+ 6) Change panel secret path
+ 7) Change GitHub repo URL
+ 8) Update from GitHub (git pull + rebuild + restart)
+ 9) Restart services
+10) View service logs
+11) Backup /etc/autoscript + xray config
+12) Set Telegram bot token / admin id
+13) Uninstall panel
  0) Exit
 EOF
   read -rp "Choose: " c
@@ -233,13 +235,15 @@ EOF
     2) reset_admin_user ;;
     3) reset_admin_password ;;
     4) change_panel_domain ;;
-    5) change_repo_url ;;
-    6) update_now ;;
-    7) restart_services ;;
-    8) view_logs ;;
-    9) backup_now ;;
-   10) reset_bot ;;
-   11) uninstall_all; exit 0 ;;
+    5) change_panel_port ;;
+    6) change_panel_path ;;
+    7) change_repo_url ;;
+    8) update_now ;;
+    9) restart_services ;;
+   10) view_logs ;;
+   11) backup_now ;;
+   12) reset_bot ;;
+   13) uninstall_all; exit 0 ;;
     0) exit 0 ;;
     *) warn "Unknown option" ;;
   esac
@@ -252,6 +256,8 @@ case "${1:-}" in
   reset-user)     reset_admin_user ;;
   reset-pass)     reset_admin_password ;;
   set-domain)     change_panel_domain ;;
+  set-port)       change_panel_port ;;
+  set-path)       change_panel_path ;;
   set-repo)       change_repo_url ;;
   update)         update_now ;;
   restart)        restart_services ;;
@@ -260,5 +266,5 @@ case "${1:-}" in
   set-bot)        reset_bot ;;
   uninstall)      uninstall_all ;;
   ""|menu)        menu ;;
-  *) echo "usage: autoscript [status|reset-user|reset-pass|set-domain|set-repo|update|restart|logs|backup|set-bot|uninstall]"; exit 1;;
+  *) echo "usage: autoscript [status|reset-user|reset-pass|set-domain|set-port|set-path|set-repo|update|restart|logs|backup|set-bot|uninstall]"; exit 1;;
 esac
