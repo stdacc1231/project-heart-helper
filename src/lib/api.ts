@@ -185,14 +185,6 @@ export interface Alert {
   acknowledged: boolean;
 }
 
-export interface Reseller {
-  id: string; name: string; telegramId?: string;
-  balanceCents: number;
-  quotaUsers: number;
-  usersCreated: number;
-  active: boolean;
-  createdAt: string;
-}
 
 const IS_PREVIEW =
   typeof window === "undefined" ||
