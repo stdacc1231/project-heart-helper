@@ -5,4 +5,4 @@ export USERNAME="$USER"
 XRAY_CFG="/usr/local/etc/xray/config.json"
 [[ -f "$XRAY_CFG" ]] || exit 0
 python3 "$(dirname "$0")/xray_client.py" remove vless
-xray -test -config "$XRAY_CFG" >/dev/null && systemctl restart xray || true
+xray run -test -config "$XRAY_CFG" >/dev/null 2>&1 || xray -test -config "$XRAY_CFG" >/dev/null && systemctl restart xray || true

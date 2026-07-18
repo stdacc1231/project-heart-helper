@@ -8,6 +8,10 @@ XRAY_CFG_DIR="/usr/local/etc/xray"
 XRAY_CFG="${XRAY_CFG_DIR}/config.json"
 LOG_DIR="/var/log/xray"
 
+xray_test() {
+  xray run -test -config "$XRAY_CFG" >/dev/null 2>&1 || xray -test -config "$XRAY_CFG" >/dev/null 2>&1
+}
+
 # 1) Install xray-core. Try the official installer first, then a direct
 # GitHub release fallback so old VPS images still self-heal during update.
 install_xray_fallback() {
@@ -120,12 +124,12 @@ cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
 PY
 
 # 3) Validate + start.
-if xray -test -config "$XRAY_CFG" >/dev/null 2>&1; then
+if xray_test; then
   systemctl enable --now xray
   systemctl restart xray
   echo "[xray] running"
 else
   echo "[xray] config test failed — leaving service stopped" >&2
-  xray -test -config "$XRAY_CFG" || true
+  xray run -test -config "$XRAY_CFG" || xray -test -config "$XRAY_CFG" || true
   exit 1
 fi
