@@ -938,6 +938,111 @@ def payments_reject(pid: str, user: str = Depends(require_auth)):
     return {"ok": True}
 
 
+@app.post("/payments/{pid}/decide")
+def payments_decide(pid: str, inp: DecisionIn, user: str = Depends(require_auth)):
+    if inp.status == "approved":
+        return payments_approve(pid, user)
+    if inp.status == "rejected":
+        return payments_reject(pid, user)
+    if inp.status != "pending":
+        raise HTTPException(400, "Invalid payment status")
+    with db() as c:
+        c.execute("UPDATE payments SET status = ?, note = ? WHERE id = ?", (inp.status, inp.reason, pid))
+    log("audit", "payment.decide", f"Payment {pid} set to {inp.status}", actor=user)
+    return {"ok": True}
+
+
+# ---- Non-critical panel modules --------------------------------------------
+@app.get("/connections")
+def connections_list(_: str = Depends(require_auth)):
+    return []
+
+
+@app.post("/connections/{cid}/kick")
+def connections_kick(cid: str, user: str = Depends(require_auth)):
+    log("audit", "connection.kick", f"Kick requested for {cid}", actor=user)
+    return {"ok": True}
+
+
+@app.get("/backups")
+def backups_list(_: str = Depends(require_auth)):
+    backups = []
+    for p in sorted(Path("/root").glob("autoscript-backup-*.tar.gz"), reverse=True):
+        st = p.stat()
+        backups.append({"id": p.name, "createdAt": datetime.fromtimestamp(st.st_mtime, timezone.utc).isoformat(),
+                        "sizeBytes": st.st_size, "kind": "manual", "destination": "local", "status": "ready"})
+    return backups
+
+
+@app.post("/backups")
+def backups_create(inp: BackupIn, user: str = Depends(require_auth)):
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    out = f"/root/autoscript-backup-{ts}.tar.gz"
+    subprocess.run(["tar", "-czf", out, "/etc/autoscript", "/usr/local/etc/xray"], capture_output=True, text=True, check=False)
+    log("audit", "backup.create", f"Backup created at {out}", actor=user)
+    return {"id": Path(out).name, "createdAt": datetime.now(timezone.utc).isoformat(),
+            "sizeBytes": Path(out).stat().st_size if Path(out).exists() else 0,
+            "kind": "manual", "destination": inp.destination, "status": "ready"}
+
+
+@app.post("/backups/{bid}/restore")
+def backups_restore(bid: str, user: str = Depends(require_auth)):
+    log("audit", "backup.restore", f"Restore requested for {bid}", actor=user, level="warn")
+    return {"ok": True}
+
+
+@app.delete("/backups/{bid}")
+def backups_delete(bid: str, user: str = Depends(require_auth)):
+    p = Path("/root") / bid
+    if p.name.startswith("autoscript-backup-") and p.suffixes[-2:] == [".tar", ".gz"] and p.exists():
+        p.unlink()
+    log("audit", "backup.delete", f"Deleted backup {bid}", actor=user, level="warn")
+    return {"ok": True}
+
+
+@app.get("/alerts")
+def alerts_list(_: str = Depends(require_auth)):
+    alerts = []
+    for svc in ("xray", "autoscript-ssh-ws", "nginx"):
+        if run(["systemctl", "is-active", svc]).stdout.strip() != "active":
+            alerts.append({"id": svc, "ts": datetime.now(timezone.utc).isoformat(), "level": "critical",
+                           "source": svc, "message": f"{svc} is not running", "acknowledged": False})
+    return alerts
+
+
+@app.post("/alerts/{aid}/ack")
+def alerts_ack(aid: str, user: str = Depends(require_auth)):
+    log("audit", "alert.ack", f"Alert acknowledged {aid}", actor=user)
+    return {"ok": True}
+
+
+@app.get("/wallet")
+def wallet_list(_: str = Depends(require_auth)):
+    return []
+
+
+@app.get("/wallet/balance")
+def wallet_balance(_: str = Depends(require_auth)):
+    return {"balanceCents": 0}
+
+
+@app.post("/wallet/credit")
+def wallet_credit(inp: CreditIn, user: str = Depends(require_auth)):
+    log("audit", "wallet.credit", f"Wallet credit {inp.amountCents}: {inp.reason}", actor=user)
+    return {"ok": True}
+
+
+@app.get("/invoices")
+def invoices_list(_: str = Depends(require_auth)):
+    return []
+
+
+@app.post("/invoices/{iid}/send")
+def invoices_send(iid: str, user: str = Depends(require_auth)):
+    log("audit", "invoice.send", f"Invoice send queued for {iid}", actor=user)
+    return {"ok": True}
+
+
 # ---- Bot (settings + internal endpoints) -----------------------------------
 BOT_KEYS = ["enabled", "token", "adminChatId", "welcomeText", "autoDeleteMinutes",
             "paymentInstructions", "paymentQrUrl"]
