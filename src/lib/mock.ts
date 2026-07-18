@@ -1,7 +1,7 @@
 // Mock backend for Lovable preview. Real Python agent replaces this on the VPS.
 import type {
   Account, Alert, Backup, BotSettings, Invoice, LiveConnection, LogEntry, Node,
-  PanelSettings, Payment, Plan, Protocol, Reseller, SystemStatus, TrafficPoint,
+  PanelSettings, Payment, Plan, Protocol, SystemStatus, TrafficPoint,
   VersionInfo, WalletTx,
 } from "./api";
 
@@ -23,7 +23,7 @@ interface MockDB {
   wallet: WalletTx[];
   walletBalanceCents: number;
   invoices: Invoice[];
-  resellers: Reseller[];
+  
 }
 
 function load(): MockDB {
@@ -130,12 +130,6 @@ function seed(): MockDB {
     { id: "w-3", ts: new Date(now - 3_600_000).toISOString(),amountCents:   500, reason: "Refund adjustment", balanceAfterCents: 1200 },
   ];
 
-  const resellers: Reseller[] = [
-    { id: "r-1", name: "Alice",   telegramId: "500000123", balanceCents: 4500, quotaUsers: 50, usersCreated: 12, active: true,  createdAt: new Date(now - 20 * day).toISOString() },
-    { id: "r-2", name: "Rendi",   telegramId: "500000777", balanceCents:  900, quotaUsers: 20, usersCreated:  4, active: true,  createdAt: new Date(now - 10 * day).toISOString() },
-    { id: "r-3", name: "Kenji",   telegramId: "500000456", balanceCents:    0, quotaUsers: 30, usersCreated: 30, active: false, createdAt: new Date(now - 60 * day).toISOString() },
-  ];
-
   const payments: Payment[] = [
     { id: "pay-1", telegramId: "500000123", telegramName: "@alice", planId: "p-basic", planName: "Basic 30d", amountCents: 300, method: "bank",        proofUrl: "https://placehold.co/400x600/0d1220/78e2c4?text=Bank+Slip",  createdAt: new Date(now - 3600_000).toISOString(), status: "pending" },
     { id: "pay-2", telegramId: "500000999", telegramName: "@bob",   planId: "p-pro",   planName: "Pro 30d",   amountCents: 700, method: "crypto_usdt", proofUrl: "https://placehold.co/400x600/0d1220/bda0ff?text=USDT+TxID", createdAt: new Date(now - 7200_000).toISOString(), status: "pending" },
@@ -171,7 +165,7 @@ function seed(): MockDB {
   return {
     loggedIn: false, accounts, logs, plans, payments, bot, settings,
     startedAt: now - 3 * day, connections, nodes, backups, alerts,
-    wallet, walletBalanceCents: 1200, invoices, resellers,
+    wallet, walletBalanceCents: 1200, invoices,
   };
 }
 
@@ -350,13 +344,6 @@ export const mock = {
   async listInvoices() { return load().invoices; },
   async sendInvoice(id: string, via: "email" | "telegram") { await wait(400); const db = load(); const inv = db.invoices.find((x) => x.id === id); audit(db, "invoice.send", `Sent invoice ${inv?.number} via ${via}`); save(db); return { ok: true as const }; },
 
-  async listResellers() { return load().resellers; },
-  async saveReseller(r: Partial<Reseller>) {
-    const db = load();
-    if (r.id) { const ex = db.resellers.find((x) => x.id === r.id); if (!ex) throw new Error("Not found"); Object.assign(ex, r); save(db); return ex; }
-    const created: Reseller = { id: "r-" + Date.now(), name: r.name ?? "Reseller", telegramId: r.telegramId, balanceCents: r.balanceCents ?? 0, quotaUsers: r.quotaUsers ?? 10, usersCreated: 0, active: r.active ?? true, createdAt: new Date().toISOString() };
-    db.resellers.unshift(created); save(db); return created;
-  },
 
   // Plans, payments, bot, settings, logs
   async listPlans() { return load().plans; },

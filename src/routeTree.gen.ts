@@ -15,7 +15,6 @@ import { Route as AuthedIndexRouteImport } from './routes/_authed.index'
 import { Route as AuthedWalletRouteImport } from './routes/_authed.wallet'
 import { Route as AuthedUpdateRouteImport } from './routes/_authed.update'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed.settings'
-import { Route as AuthedResellersRouteImport } from './routes/_authed.resellers'
 import { Route as AuthedPlansRouteImport } from './routes/_authed.plans'
 import { Route as AuthedPaymentsRouteImport } from './routes/_authed.payments'
 import { Route as AuthedNodesRouteImport } from './routes/_authed.nodes'
@@ -55,11 +54,6 @@ const AuthedUpdateRoute = AuthedUpdateRouteImport.update({
 const AuthedSettingsRoute = AuthedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => AuthedRoute,
-} as any)
-const AuthedResellersRoute = AuthedResellersRouteImport.update({
-  id: '/resellers',
-  path: '/resellers',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedPlansRoute = AuthedPlansRouteImport.update({
@@ -131,7 +125,6 @@ export interface FileRoutesByFullPath {
   '/nodes': typeof AuthedNodesRoute
   '/payments': typeof AuthedPaymentsRoute
   '/plans': typeof AuthedPlansRoute
-  '/resellers': typeof AuthedResellersRoute
   '/settings': typeof AuthedSettingsRoute
   '/update': typeof AuthedUpdateRoute
   '/wallet': typeof AuthedWalletRoute
@@ -149,7 +142,6 @@ export interface FileRoutesByTo {
   '/nodes': typeof AuthedNodesRoute
   '/payments': typeof AuthedPaymentsRoute
   '/plans': typeof AuthedPlansRoute
-  '/resellers': typeof AuthedResellersRoute
   '/settings': typeof AuthedSettingsRoute
   '/update': typeof AuthedUpdateRoute
   '/wallet': typeof AuthedWalletRoute
@@ -170,7 +162,6 @@ export interface FileRoutesById {
   '/_authed/nodes': typeof AuthedNodesRoute
   '/_authed/payments': typeof AuthedPaymentsRoute
   '/_authed/plans': typeof AuthedPlansRoute
-  '/_authed/resellers': typeof AuthedResellersRoute
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/update': typeof AuthedUpdateRoute
   '/_authed/wallet': typeof AuthedWalletRoute
@@ -192,7 +183,6 @@ export interface FileRouteTypes {
     | '/nodes'
     | '/payments'
     | '/plans'
-    | '/resellers'
     | '/settings'
     | '/update'
     | '/wallet'
@@ -210,7 +200,6 @@ export interface FileRouteTypes {
     | '/nodes'
     | '/payments'
     | '/plans'
-    | '/resellers'
     | '/settings'
     | '/update'
     | '/wallet'
@@ -230,7 +219,6 @@ export interface FileRouteTypes {
     | '/_authed/nodes'
     | '/_authed/payments'
     | '/_authed/plans'
-    | '/_authed/resellers'
     | '/_authed/settings'
     | '/_authed/update'
     | '/_authed/wallet'
@@ -285,13 +273,6 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AuthedSettingsRouteImport
-      parentRoute: typeof AuthedRoute
-    }
-    '/_authed/resellers': {
-      id: '/_authed/resellers'
-      path: '/resellers'
-      fullPath: '/resellers'
-      preLoaderRoute: typeof AuthedResellersRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/plans': {
@@ -397,7 +378,6 @@ interface AuthedRouteChildren {
   AuthedNodesRoute: typeof AuthedNodesRoute
   AuthedPaymentsRoute: typeof AuthedPaymentsRoute
   AuthedPlansRoute: typeof AuthedPlansRoute
-  AuthedResellersRoute: typeof AuthedResellersRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedUpdateRoute: typeof AuthedUpdateRoute
   AuthedWalletRoute: typeof AuthedWalletRoute
@@ -415,7 +395,6 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedNodesRoute: AuthedNodesRoute,
   AuthedPaymentsRoute: AuthedPaymentsRoute,
   AuthedPlansRoute: AuthedPlansRoute,
-  AuthedResellersRoute: AuthedResellersRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedUpdateRoute: AuthedUpdateRoute,
   AuthedWalletRoute: AuthedWalletRoute,
