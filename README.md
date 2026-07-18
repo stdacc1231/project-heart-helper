@@ -52,6 +52,26 @@ It then:
   · plain: 80,8080,8880,2052,2082,2086,2095).
 - Purges any pre-existing Cloudflare WARP / Zero Trust install.
 
+## Admin CLI (on the VPS)
+
+After install, an `autoscript` command is available system-wide. Run it as
+root for a menu, or use flags for scripting:
+
+```
+autoscript              # interactive menu
+autoscript status       # panel + service status
+autoscript reset-user   # change admin username
+autoscript reset-pass   # change admin password
+autoscript set-domain   # change panel domain / port / TLS mode (re-issues cert)
+autoscript set-repo     # change GitHub repo URL used for updates
+autoscript update       # git pull origin main + restart services
+autoscript restart      # restart agent, ssh-ws, bot, nginx
+autoscript logs         # tail service logs
+autoscript backup       # tar /etc/autoscript + xray config
+autoscript set-bot      # set Telegram bot token / admin chat id
+autoscript uninstall    # full uninstall
+```
+
 ## Uninstall
 
 ```bash
