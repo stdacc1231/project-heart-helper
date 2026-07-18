@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { ArrowLeft, Copy, Trash2, Save } from "lucide-react";
+import { ArrowLeft, Copy, Trash2, Save, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,10 @@ function AccountDetail() {
       navigate({ to: "/accounts" });
     },
   });
+  const sendTg = useMutation({
+    mutationFn: () => api.accounts.sendToTelegram(id),
+    onSuccess: () => toast.success("Config sent via Telegram"),
+  });
 
   if (!data) return <div className="text-sm text-muted-foreground">Loading…</div>;
 
@@ -62,16 +66,24 @@ function AccountDetail() {
               <Input type="date" value={f.expiresAt?.slice(0, 10) ?? ""} onChange={(e) => setF({ ...f, expiresAt: new Date(e.target.value).toISOString() })} />
             </div>
             <div className="space-y-1.5">
+              <Label>Telegram ID</Label>
+              <Input value={f.telegramId ?? ""} onChange={(e) => setF({ ...f, telegramId: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
               <Label>IP limit</Label>
               <Input type="number" value={f.ipLimit ?? 0} onChange={(e) => setF({ ...f, ipLimit: +e.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label>Speed (kbps)</Label>
-              <Input type="number" value={f.speedLimitKbps ?? 0} onChange={(e) => setF({ ...f, speedLimitKbps: +e.target.value })} />
-            </div>
-            <div className="space-y-1.5">
               <Label>Quota (GB)</Label>
               <Input type="number" value={f.quotaGb ?? 0} onChange={(e) => setF({ ...f, quotaGb: +e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Down (kbps)</Label>
+              <Input type="number" value={f.speedDnKbps ?? 0} onChange={(e) => setF({ ...f, speedDnKbps: +e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Up (kbps)</Label>
+              <Input type="number" value={f.speedUpKbps ?? 0} onChange={(e) => setF({ ...f, speedUpKbps: +e.target.value })} />
             </div>
             {data.protocol === "ssh" && (
               <div className="col-span-2 space-y-1.5">
@@ -98,15 +110,23 @@ function AccountDetail() {
             <Field label="Created" value={new Date(data.createdAt).toLocaleString()} />
             <Field label="Expires" value={new Date(data.expiresAt).toLocaleString()} />
             {data.uuid && <Field label="UUID" value={data.uuid} mono />}
+            {data.telegramId && <Field label="Telegram ID" value={data.telegramId} mono />}
           </dl>
         </Card>
 
         <Card className="p-4 lg:col-span-2">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-medium">Client config</h3>
-            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(cfg?.link ?? ""); toast.success("Copied"); }}>
-              <Copy className="mr-1 h-4 w-4" /> Copy link
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(cfg?.link ?? ""); toast.success("Copied"); }}>
+                <Copy className="mr-1 h-4 w-4" /> Copy link
+              </Button>
+              {data.telegramId && (
+                <Button size="sm" onClick={() => sendTg.mutate()} disabled={sendTg.isPending}>
+                  <Send className="mr-1 h-4 w-4" /> Send via Telegram
+                </Button>
+              )}
+            </div>
           </div>
           <Input readOnly value={cfg?.link ?? ""} className="font-mono text-xs" />
           {cfg?.text && (

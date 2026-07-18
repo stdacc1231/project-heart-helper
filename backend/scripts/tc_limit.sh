@@ -1,34 +1,20 @@
 #!/usr/bin/env bash
-# tc-based per-user speed limiter. Called by the agent on account create/edit.
-# Usage: tc_limit.sh <username> <kbps>   (kbps=0 removes any existing limit)
+# tc HTB per-user speed limiter. Args: USERNAME UP_KBPS DN_KBPS
+# 0 = unlimited (removes any existing class).
 set -euo pipefail
-USER=${1:?}; KBPS=${2:-0}
+USER=${1:?}; UP=${2:-0}; DN=${3:-0}
 IFACE=$(ip route show default | awk '/default/ {print $5; exit}')
-UID_NUM=$(id -u "$USER" 2>/dev/null || echo "")
+[[ -n "$IFACE" ]] || exit 0
 
-# Ensure root qdisc exists
-tc qdisc show dev "$IFACE" | grep -q htb || tc qdisc add dev "$IFACE" root handle 1: htb default 30
+CLASSID=$(printf '1:%x' $(( 0x10 + $(id -u "$USER" 2>/dev/null || echo 0) % 0xFFEF )))
 
-# Stable classid derived from the linux uid (fallback to hash of username)
-if [[ -z "$UID_NUM" ]]; then
-  UID_NUM=$(( $(printf '%s' "$USER" | cksum | awk '{print $1}') % 60000 + 1000 ))
+# ensure root qdisc
+tc qdisc show dev "$IFACE" | grep -q "htb 1:" || tc qdisc add dev "$IFACE" root handle 1: htb default 1
+
+# remove existing class if any
+tc class del dev "$IFACE" classid "$CLASSID" 2>/dev/null || true
+
+if [[ "$DN" -gt 0 ]]; then
+  tc class add dev "$IFACE" parent 1: classid "$CLASSID" htb rate "${DN}kbit" ceil "${DN}kbit"
 fi
-CLASSID=$((UID_NUM % 65000 + 100))
-
-# Remove existing rules for this class
-tc filter del dev "$IFACE" pref "$CLASSID" 2>/dev/null || true
-tc class  del dev "$IFACE" classid 1:"$CLASSID" 2>/dev/null || true
-
-if [[ "$KBPS" -gt 0 ]]; then
-  tc class add dev "$IFACE" parent 1: classid 1:"$CLASSID" htb rate "${KBPS}kbit" ceil "${KBPS}kbit"
-  # Match traffic owned by this user (egress). Ingress limiting would need ifb.
-  tc filter add dev "$IFACE" protocol ip parent 1: prio "$CLASSID" \
-     handle "$UID_NUM" fw flowid 1:"$CLASSID"
-  # Mark packets from this uid
-  iptables -t mangle -C OUTPUT -m owner --uid-owner "$USER" -j MARK --set-mark "$UID_NUM" 2>/dev/null \
-    || iptables -t mangle -A OUTPUT -m owner --uid-owner "$USER" -j MARK --set-mark "$UID_NUM"
-  echo "limited $USER to ${KBPS}kbps on $IFACE"
-else
-  iptables -t mangle -D OUTPUT -m owner --uid-owner "$USER" -j MARK --set-mark "$UID_NUM" 2>/dev/null || true
-  echo "removed limit for $USER"
-fi
+echo "tc_limit: $USER  up=${UP}kbps dn=${DN}kbps class=$CLASSID iface=$IFACE"

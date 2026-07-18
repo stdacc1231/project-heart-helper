@@ -1,5 +1,8 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Users, ScrollText, Settings, RefreshCw, LogOut, Server, Menu } from "lucide-react";
+import {
+  LayoutDashboard, Users, ScrollText, Settings, RefreshCw, LogOut, Server, Menu,
+  CreditCard, Package, Bot,
+} from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -11,6 +14,9 @@ import { toast } from "sonner";
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/accounts", label: "Accounts", icon: Users },
+  { to: "/plans", label: "Plans", icon: Package },
+  { to: "/payments", label: "Payments", icon: CreditCard },
+  { to: "/bot", label: "Telegram Bot", icon: Bot },
   { to: "/logs", label: "Logs", icon: ScrollText },
   { to: "/update", label: "Update", icon: RefreshCw },
   { to: "/settings", label: "Settings", icon: Settings },
@@ -31,6 +37,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
   });
 
+  const active = (to: string) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <aside
@@ -49,25 +57,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav className="flex flex-col gap-0.5 p-2">
-          {nav.map((item) => {
-            const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={() => setOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                  active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            );
-          })}
+          {nav.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              onClick={() => setOpen(false)}
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                active(item.to)
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+              )}
+            >
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </Link>
+          ))}
         </nav>
         <div className="absolute inset-x-0 bottom-0 border-t p-3">
           <div className="flex items-center justify-between">

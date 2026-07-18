@@ -1,0 +1,17 @@
+[Unit]
+Description=Autoscript Telegram Bot
+After=network-online.target autoscript-agent.service
+Wants=network-online.target
+Requires=autoscript-agent.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/autoscript/agent.env
+WorkingDirectory=/opt/autoscript/backend/agent
+ExecStart=/opt/autoscript/backend/.venv/bin/python /opt/autoscript/backend/agent/bot.py
+Restart=on-failure
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

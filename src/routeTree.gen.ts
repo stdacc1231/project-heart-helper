@@ -14,7 +14,10 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AuthedIndexRouteImport } from './routes/_authed.index'
 import { Route as AuthedUpdateRouteImport } from './routes/_authed.update'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed.settings'
+import { Route as AuthedPlansRouteImport } from './routes/_authed.plans'
+import { Route as AuthedPaymentsRouteImport } from './routes/_authed.payments'
 import { Route as AuthedLogsRouteImport } from './routes/_authed.logs'
+import { Route as AuthedBotRouteImport } from './routes/_authed.bot'
 import { Route as AuthedAccountsRouteImport } from './routes/_authed.accounts'
 import { Route as AuthedAccountsIdRouteImport } from './routes/_authed.accounts.$id'
 
@@ -42,9 +45,24 @@ const AuthedSettingsRoute = AuthedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedPlansRoute = AuthedPlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedPaymentsRoute = AuthedPaymentsRouteImport.update({
+  id: '/payments',
+  path: '/payments',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedLogsRoute = AuthedLogsRouteImport.update({
   id: '/logs',
   path: '/logs',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedBotRoute = AuthedBotRouteImport.update({
+  id: '/bot',
+  path: '/bot',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedAccountsRoute = AuthedAccountsRouteImport.update({
@@ -62,7 +80,10 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/login': typeof LoginRoute
   '/accounts': typeof AuthedAccountsRouteWithChildren
+  '/bot': typeof AuthedBotRoute
   '/logs': typeof AuthedLogsRoute
+  '/payments': typeof AuthedPaymentsRoute
+  '/plans': typeof AuthedPlansRoute
   '/settings': typeof AuthedSettingsRoute
   '/update': typeof AuthedUpdateRoute
   '/accounts/$id': typeof AuthedAccountsIdRoute
@@ -70,7 +91,10 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/accounts': typeof AuthedAccountsRouteWithChildren
+  '/bot': typeof AuthedBotRoute
   '/logs': typeof AuthedLogsRoute
+  '/payments': typeof AuthedPaymentsRoute
+  '/plans': typeof AuthedPlansRoute
   '/settings': typeof AuthedSettingsRoute
   '/update': typeof AuthedUpdateRoute
   '/': typeof AuthedIndexRoute
@@ -81,7 +105,10 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authed/accounts': typeof AuthedAccountsRouteWithChildren
+  '/_authed/bot': typeof AuthedBotRoute
   '/_authed/logs': typeof AuthedLogsRoute
+  '/_authed/payments': typeof AuthedPaymentsRoute
+  '/_authed/plans': typeof AuthedPlansRoute
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/update': typeof AuthedUpdateRoute
   '/_authed/': typeof AuthedIndexRoute
@@ -93,7 +120,10 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/accounts'
+    | '/bot'
     | '/logs'
+    | '/payments'
+    | '/plans'
     | '/settings'
     | '/update'
     | '/accounts/$id'
@@ -101,7 +131,10 @@ export interface FileRouteTypes {
   to:
     | '/login'
     | '/accounts'
+    | '/bot'
     | '/logs'
+    | '/payments'
+    | '/plans'
     | '/settings'
     | '/update'
     | '/'
@@ -111,7 +144,10 @@ export interface FileRouteTypes {
     | '/_authed'
     | '/login'
     | '/_authed/accounts'
+    | '/_authed/bot'
     | '/_authed/logs'
+    | '/_authed/payments'
+    | '/_authed/plans'
     | '/_authed/settings'
     | '/_authed/update'
     | '/_authed/'
@@ -160,11 +196,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedSettingsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/plans': {
+      id: '/_authed/plans'
+      path: '/plans'
+      fullPath: '/plans'
+      preLoaderRoute: typeof AuthedPlansRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/payments': {
+      id: '/_authed/payments'
+      path: '/payments'
+      fullPath: '/payments'
+      preLoaderRoute: typeof AuthedPaymentsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/logs': {
       id: '/_authed/logs'
       path: '/logs'
       fullPath: '/logs'
       preLoaderRoute: typeof AuthedLogsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/bot': {
+      id: '/_authed/bot'
+      path: '/bot'
+      fullPath: '/bot'
+      preLoaderRoute: typeof AuthedBotRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/accounts': {
@@ -198,7 +255,10 @@ const AuthedAccountsRouteWithChildren = AuthedAccountsRoute._addFileChildren(
 
 interface AuthedRouteChildren {
   AuthedAccountsRoute: typeof AuthedAccountsRouteWithChildren
+  AuthedBotRoute: typeof AuthedBotRoute
   AuthedLogsRoute: typeof AuthedLogsRoute
+  AuthedPaymentsRoute: typeof AuthedPaymentsRoute
+  AuthedPlansRoute: typeof AuthedPlansRoute
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedUpdateRoute: typeof AuthedUpdateRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
@@ -206,7 +266,10 @@ interface AuthedRouteChildren {
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedAccountsRoute: AuthedAccountsRouteWithChildren,
+  AuthedBotRoute: AuthedBotRoute,
   AuthedLogsRoute: AuthedLogsRoute,
+  AuthedPaymentsRoute: AuthedPaymentsRoute,
+  AuthedPlansRoute: AuthedPlansRoute,
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedUpdateRoute: AuthedUpdateRoute,
   AuthedIndexRoute: AuthedIndexRoute,
@@ -222,13 +285,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
