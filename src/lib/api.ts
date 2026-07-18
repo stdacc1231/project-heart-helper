@@ -190,8 +190,8 @@ export interface Alert {
 
 
 const IS_PREVIEW =
-  typeof window === "undefined" ||
-  /lovable\.(app|dev)$|lovableproject\.com$|localhost/.test(window.location.hostname);
+  typeof window !== "undefined" &&
+  /lovable\.(app|dev)$|lovableproject\.com$|localhost|127\.0\.0\.1/.test(window.location.hostname);
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -209,7 +209,15 @@ export const api = {
   auth: {
     async login(u: string, p: string) { return IS_PREVIEW ? mock.login(u, p) : req("/auth/login", { method: "POST", body: JSON.stringify({ username: u, password: p }) }); },
     async logout() { return IS_PREVIEW ? mock.logout() : req("/auth/logout", { method: "POST" }); },
-    async me() { return IS_PREVIEW ? mock.me() : req<{ username: string } | null>("/auth/me"); },
+    async me() {
+      if (IS_PREVIEW) return mock.me();
+      try {
+        return await req<{ username: string } | null>("/auth/me");
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("401 ")) return null;
+        throw error;
+      }
+    },
   },
   system: {
     async status() { return IS_PREVIEW ? mock.status() : req<SystemStatus>("/system/status"); },

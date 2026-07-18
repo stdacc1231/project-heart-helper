@@ -64,11 +64,11 @@ build_web_ui() {
     fi
     npm run build
   fi
-  if [[ -f "$INSTALL_ROOT/.output/server/index.mjs" ]]; then
-    ok "Web server bundle at $INSTALL_ROOT/.output/server/index.mjs"
+  if [[ -f "$INSTALL_ROOT/dist/server/index.mjs" || -f "$INSTALL_ROOT/.output/server/index.mjs" ]]; then
+    ok "Web server bundle ready"
     return 0
   fi
-  warn "Node server bundle not found at .output/server/index.mjs — panel will not load."
+  warn "Web server bundle not found (expected dist/server/index.mjs or .output/server/index.mjs) — panel will not load."
   return 1
 }
 
