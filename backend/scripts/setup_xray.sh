@@ -16,55 +16,63 @@ fi
 
 mkdir -p "$XRAY_CFG_DIR" "$LOG_DIR"
 
-# 2) Write a minimal working config if one doesn't already exist. We keep the
-# accounts array empty here — provision_*.sh scripts append clients later.
-if [[ ! -s "$XRAY_CFG" ]]; then
-  cat >"$XRAY_CFG" <<'JSON'
-{
-  "log": { "loglevel": "warning", "access": "/var/log/xray/access.log", "error": "/var/log/xray/error.log" },
-  "api": { "tag": "api", "services": ["StatsService"] },
+# 2) Always normalize the config so upgrades repair old/broken templates while
+# keeping existing VMess/VLESS/Trojan users.
+python3 - "$XRAY_CFG" <<'PY'
+import json, sys
+from pathlib import Path
+
+cfg_path = Path(sys.argv[1])
+old = {}
+if cfg_path.exists() and cfg_path.stat().st_size:
+    try:
+        old = json.loads(cfg_path.read_text())
+    except Exception:
+        old = {}
+
+def clients(tag):
+    for inbound in old.get("inbounds", []):
+        if inbound.get("tag") == tag:
+            return inbound.get("settings", {}).get("clients", []) or []
+    return []
+
+cfg = {
+  "log": {"loglevel": "warning", "access": "/var/log/xray/access.log", "error": "/var/log/xray/error.log"},
+  "api": {"tag": "api", "services": ["StatsService"]},
   "stats": {},
   "policy": {
-    "levels": { "0": { "statsUserUplink": true, "statsUserDownlink": true } },
-    "system": { "statsInboundUplink": true, "statsInboundDownlink": true }
+    "levels": {"0": {"statsUserUplink": True, "statsUserDownlink": True}},
+    "system": {"statsInboundUplink": True, "statsInboundDownlink": True},
   },
   "inbounds": [
     {
-      "tag": "api-in",
-      "listen": "127.0.0.1", "port": 10085, "protocol": "dokodemo-door",
-      "settings": { "address": "127.0.0.1" }
+      "tag": "api-in", "listen": "127.0.0.1", "port": 10085, "protocol": "dokodemo-door",
+      "settings": {"address": "127.0.0.1", "port": 10085, "network": "tcp"},
     },
     {
-      "tag": "vmess-ws",
-      "listen": "127.0.0.1", "port": 10001, "protocol": "vmess",
-      "settings": { "clients": [] },
-      "streamSettings": { "network": "ws", "wsSettings": { "path": "/vmess" } }
+      "tag": "vmess-ws", "listen": "127.0.0.1", "port": 10001, "protocol": "vmess",
+      "settings": {"clients": clients("vmess-ws")},
+      "streamSettings": {"network": "ws", "wsSettings": {"path": "/vmess"}},
     },
     {
-      "tag": "vless-ws",
-      "listen": "127.0.0.1", "port": 10002, "protocol": "vless",
-      "settings": { "clients": [], "decryption": "none" },
-      "streamSettings": { "network": "ws", "wsSettings": { "path": "/vless" } }
+      "tag": "vless-ws", "listen": "127.0.0.1", "port": 10002, "protocol": "vless",
+      "settings": {"clients": clients("vless-ws"), "decryption": "none"},
+      "streamSettings": {"network": "ws", "wsSettings": {"path": "/vless"}},
     },
     {
-      "tag": "trojan-ws",
-      "listen": "127.0.0.1", "port": 10003, "protocol": "trojan",
-      "settings": { "clients": [] },
-      "streamSettings": { "network": "ws", "wsSettings": { "path": "/trojan" } }
-    }
+      "tag": "trojan-ws", "listen": "127.0.0.1", "port": 10003, "protocol": "trojan",
+      "settings": {"clients": clients("trojan-ws")},
+      "streamSettings": {"network": "ws", "wsSettings": {"path": "/trojan"}},
+    },
   ],
   "outbounds": [
-    { "protocol": "freedom", "tag": "direct" },
-    { "protocol": "blackhole", "tag": "block" }
+    {"protocol": "freedom", "tag": "direct"},
+    {"protocol": "blackhole", "tag": "block"},
   ],
-  "routing": {
-    "rules": [
-      { "type": "field", "inboundTag": ["api-in"], "outboundTag": "api" }
-    ]
-  }
+  "routing": {"rules": [{"type": "field", "inboundTag": ["api-in"], "outboundTag": "api"}]},
 }
-JSON
-fi
+cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
+PY
 
 # 3) Validate + start.
 if xray -test -config "$XRAY_CFG" >/dev/null 2>&1; then
