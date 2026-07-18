@@ -165,7 +165,7 @@ function seed(): MockDB {
   return {
     loggedIn: false, accounts, logs, plans, payments, bot, settings,
     startedAt: now - 3 * day, connections, nodes, backups, alerts,
-    wallet, walletBalanceCents: 1200, invoices, resellers,
+    wallet, walletBalanceCents: 1200, invoices,
   };
 }
 
