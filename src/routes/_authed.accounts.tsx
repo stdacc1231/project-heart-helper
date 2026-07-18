@@ -188,6 +188,7 @@ function AccountsPage() {
 
 function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
   const { data: plans } = useQuery({ queryKey: ["plans"], queryFn: () => api.plans.list() });
+  const [trialHours, setTrialHours] = useState<number>(0);
   const [f, setF] = useState<Partial<Account>>({
     protocol: "ssh", username: "", password: "",
     ipLimit: 2, speedUpKbps: 0, speedDnKbps: 0, quotaGb: 0,
@@ -196,7 +197,12 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
   });
   const qc = useQueryClient();
   const create = useMutation({
-    mutationFn: () => api.accounts.create({ ...f, expiresAt: new Date(f.expiresAt!).toISOString() }),
+    mutationFn: () => {
+      const expiresAt = trialHours > 0
+        ? new Date(Date.now() + trialHours * 3600_000).toISOString()
+        : new Date(f.expiresAt!).toISOString();
+      return api.accounts.create({ ...f, trial: trialHours > 0 || !!f.trial, expiresAt });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["accounts"] });
       toast.success("Account created");
@@ -215,7 +221,9 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
       quotaGb: p.quotaGb,
       expiresAt: new Date(Date.now() + (p.durationDays || 30) * 86400_000).toISOString().slice(0, 10),
     });
+    setTrialHours(0);
   };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
