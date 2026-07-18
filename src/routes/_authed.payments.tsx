@@ -22,11 +22,11 @@ function PaymentsPage() {
   });
   const qc = useQueryClient();
   const approve = useMutation({
-    mutationFn: (id: string) => api.payments.approve(id),
+    mutationFn: (id: string) => api.payments.decide(id, "approved"),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["payments"] }); toast.success("Approved — account provisioned"); },
   });
   const reject = useMutation({
-    mutationFn: (id: string) => api.payments.reject(id),
+    mutationFn: (id: string) => api.payments.decide(id, "rejected"),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["payments"] }); toast.success("Rejected"); },
   });
 
