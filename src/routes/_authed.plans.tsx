@@ -70,7 +70,7 @@ function PlansPage() {
                 <TableCell>{formatMoney(p.priceCents)}{p.mode !== "prepaid" && <span className="text-xs text-muted-foreground"> /{p.mode === "payg_gb" ? "GB" : "day"}</span>}</TableCell>
                 <TableCell>{p.durationDays ? `${p.durationDays}d` : "—"}</TableCell>
                 <TableCell>{p.quotaGb ? `${p.quotaGb} GB` : "∞"}</TableCell>
-                <TableCell className="text-xs">{p.speedDnKbps || "∞"} / {p.speedUpKbps || "∞"}</TableCell>
+                <TableCell className="text-xs">{p.speedDnKbps ? `${(p.speedDnKbps/1000).toFixed(p.speedDnKbps%1000?1:0)}` : "∞"} / {p.speedUpKbps ? `${(p.speedUpKbps/1000).toFixed(p.speedUpKbps%1000?1:0)}` : "∞"} Mbps</TableCell>
                 <TableCell>{p.ipLimit}</TableCell>
                 <TableCell><Badge variant={p.active ? "secondary" : "outline"}>{p.active ? "yes" : "no"}</Badge></TableCell>
                 <TableCell className="text-right">
@@ -147,12 +147,12 @@ function PlanDialog({ open, onOpenChange, initial }: { open: boolean; onOpenChan
             <Input type="number" value={f.ipLimit ?? 2} onChange={(e) => setF({ ...f, ipLimit: +e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Down (kbps)</Label>
-            <Input type="number" value={f.speedDnKbps ?? 0} onChange={(e) => setF({ ...f, speedDnKbps: +e.target.value })} />
+            <Label>Down (Mbps)</Label>
+            <Input type="number" step="0.1" min="0" value={(f.speedDnKbps ?? 0)/1000} onChange={(e) => setF({ ...f, speedDnKbps: Math.round((+e.target.value) * 1000) })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Up (kbps)</Label>
-            <Input type="number" value={f.speedUpKbps ?? 0} onChange={(e) => setF({ ...f, speedUpKbps: +e.target.value })} />
+            <Label>Up (Mbps)</Label>
+            <Input type="number" step="0.1" min="0" value={(f.speedUpKbps ?? 0)/1000} onChange={(e) => setF({ ...f, speedUpKbps: Math.round((+e.target.value) * 1000) })} />
           </div>
           <div className="col-span-2 flex items-center justify-between rounded-md border p-3">
             <div>
