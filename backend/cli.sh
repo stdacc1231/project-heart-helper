@@ -165,6 +165,12 @@ update_now() {
   git reset --hard origin/main
   if [[ -f backend/scripts/migrate.sh ]]; then bash backend/scripts/migrate.sh || warn "migrate failed"; fi
   "$INSTALL_ROOT/backend/.venv/bin/pip" install -q -r "$INSTALL_ROOT/backend/agent/requirements.txt" || true
+  say "Rebuilding web UI"
+  if [[ -f bun.lockb ]] && command -v bun >/dev/null; then
+    bun install --production=false && bun run build || warn "SPA rebuild failed"
+  elif command -v npm >/dev/null; then
+    (npm ci --no-audit --no-fund || npm install --no-audit --no-fund) && npm run build || warn "SPA rebuild failed"
+  fi
   restart_stack
   ok "Updated to latest main."
 }
