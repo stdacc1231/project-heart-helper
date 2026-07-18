@@ -61,9 +61,18 @@ LimitNOFILE=1000000
 [Install]
 WantedBy=multi-user.target
 EOF
+
+# The official installer may leave a hardening drop-in that changes the runtime
+# user. That can block our managed log/config paths after upgrades, so normalize
+# to this script's known-good unit each time repair/update runs.
+rm -rf /etc/systemd/system/xray.service.d
 systemctl daemon-reload
 
 mkdir -p "$XRAY_CFG_DIR" "$LOG_DIR"
+touch "$LOG_DIR/access.log" "$LOG_DIR/error.log"
+chown -R root:root "$XRAY_CFG_DIR" "$LOG_DIR"
+chmod 755 "$XRAY_CFG_DIR" "$LOG_DIR"
+chmod 644 "$LOG_DIR/access.log" "$LOG_DIR/error.log"
 
 # 2) Always normalize the config so upgrades repair old/broken templates while
 # keeping existing VMess/VLESS/Trojan users.
