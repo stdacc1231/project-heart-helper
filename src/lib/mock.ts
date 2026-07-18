@@ -1,7 +1,7 @@
 // Mock backend for Lovable preview. Real Python agent replaces this on the VPS.
 import type {
   Account, Alert, Backup, BotSettings, Invoice, LiveConnection, LogEntry, Node,
-  PanelSettings, Payment, Plan, Protocol, Reseller, SystemStatus, TrafficPoint,
+  PanelSettings, Payment, Plan, Protocol, SystemStatus, TrafficPoint,
   VersionInfo, WalletTx,
 } from "./api";
 
