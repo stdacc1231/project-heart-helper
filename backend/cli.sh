@@ -203,9 +203,21 @@ update_now() {
   git reset --hard origin/main
   if [[ -f backend/scripts/migrate.sh ]]; then bash backend/scripts/migrate.sh || warn "migrate failed"; fi
   "$INSTALL_ROOT/backend/.venv/bin/pip" install -q -r "$INSTALL_ROOT/backend/agent/requirements.txt" || true
+  # Backfill WEB_INTERNAL_PORT for pre-existing installs
+  if ! grep -q '^WEB_INTERNAL_PORT=' /etc/autoscript/agent.env 2>/dev/null; then
+    local p=$(( ( RANDOM % 20000 ) + 20000 ))
+    echo "WEB_INTERNAL_PORT=$p" >> /etc/autoscript/agent.env
+    say "Assigned internal web port $p"
+  fi
+  # Install/refresh the web systemd unit
+  if [[ -f "$INSTALL_ROOT/backend/systemd/autoscript-web.service" ]]; then
+    install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-web.service" /etc/systemd/system/
+    systemctl daemon-reload
+    systemctl enable autoscript-web >/dev/null 2>&1 || true
+  fi
   say "Rebuilding web UI"
   ensure_node22
-  build_web_ui || warn "SPA rebuild failed"
+  build_web_ui || warn "Web rebuild failed"
   restart_stack
   ok "Updated to latest main."
 }
