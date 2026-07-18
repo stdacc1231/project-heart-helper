@@ -209,12 +209,13 @@ update_now() {
     echo "WEB_INTERNAL_PORT=$p" >> /etc/autoscript/agent.env
     say "Assigned internal web port $p"
   fi
-  # Install/refresh the web systemd unit
-  if [[ -f "$INSTALL_ROOT/backend/systemd/autoscript-web.service" ]]; then
-    install -m 644 "$INSTALL_ROOT/backend/systemd/autoscript-web.service" /etc/systemd/system/
-    systemctl daemon-reload
-    systemctl enable autoscript-web >/dev/null 2>&1 || true
-  fi
+  # Install/refresh all systemd units so service hardening and launcher fixes
+  # are applied on existing VPS installs too.
+  for unit in autoscript-agent.service autoscript-ssh-ws.service autoscript-bot.service autoscript-ip-limit.service autoscript-ip-limit.timer autoscript-web.service; do
+    [[ -f "$INSTALL_ROOT/backend/systemd/$unit" ]] && install -m 644 "$INSTALL_ROOT/backend/systemd/$unit" /etc/systemd/system/
+  done
+  systemctl daemon-reload
+  systemctl enable autoscript-agent autoscript-ssh-ws autoscript-bot autoscript-ip-limit.timer autoscript-web >/dev/null 2>&1 || true
   say "Rebuilding web UI"
   ensure_node22
   build_web_ui || warn "Web rebuild failed"
