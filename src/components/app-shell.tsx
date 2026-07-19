@@ -45,6 +45,19 @@ const groups: NavGroup[] = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  useEffect(() => {
+    const t = (typeof localStorage !== "undefined" && localStorage.getItem("theme")) === "light" ? "light" : "dark";
+    setTheme(t);
+  }, []);
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    const d = document.documentElement;
+    d.classList.toggle("dark", next === "dark");
+    d.classList.toggle("light", next === "light");
+    try { localStorage.setItem("theme", next); } catch {}
+  };
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: () => api.auth.me() });
@@ -57,6 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const active = (to: string) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
   const currentLabel = groups.flatMap((g) => g.items).find((i) => active(i.to))?.label ?? "Dashboard";
+
 
   return (
     <div className="min-h-screen aurora-bg text-foreground">
