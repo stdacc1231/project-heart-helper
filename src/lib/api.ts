@@ -24,7 +24,9 @@ export interface Account {
   quotaGb: number;
   usedBytes: number;
   online: number;
-  status: "active" | "expired" | "locked" | "trial";
+  status: "active" | "expired" | "locked" | "trial" | "pending" | "suspended";
+  warning?: string;
+
   telegramId?: string;
   planId?: string;
   note?: string;

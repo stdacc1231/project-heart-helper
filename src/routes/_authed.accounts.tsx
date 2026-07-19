@@ -145,15 +145,20 @@ function AccountsPage() {
                   <Badge variant="outline" className={
                     a.status === "active" ? "border-primary/40 text-primary" :
                     a.status === "trial"  ? "border-accent/40 text-accent" :
-                    a.status === "locked" ? "border-warning/40 text-warning" : "border-destructive/40 text-destructive"
+                    a.status === "pending" ? "border-warning/40 text-warning" :
+                    a.status === "locked" ? "border-warning/40 text-warning" :
+                    a.status === "suspended" ? "border-destructive/40 text-destructive" :
+                    "border-destructive/40 text-destructive"
                   }>{a.status}</Badge>
+
                 </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" title="Copy subscription URL" onClick={() => copySub(a.id)}><Copy className="h-4 w-4" /></Button>
                   <Button variant="ghost" size="icon" title="Send via Telegram" onClick={() => api.accounts.sendTelegram(a.id).then(() => toast.success("Sent"))}><Send className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" title="Edit" onClick={() => setEditId(a.id)}>
-                    <Pencil className="h-4 w-4" />
+                  <Button variant="ghost" size="icon" title="Open / edit" asChild>
+                    <Link to="/accounts/$id" params={{ id: a.id }}><Pencil className="h-4 w-4" /></Link>
                   </Button>
+
                   <Button variant="ghost" size="icon" title="Delete"
                     onClick={() => { if (confirm(`Delete ${a.username}?`)) remove.mutate(a.id); }}>
                     <Trash2 className="h-4 w-4 text-destructive" />
@@ -193,13 +198,18 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
         : new Date(f.expiresAt!).toISOString();
       return api.accounts.create({ ...f, trial: trialHours > 0 || !!f.trial, expiresAt });
     },
-    onSuccess: () => {
+    onSuccess: (acc) => {
       qc.invalidateQueries({ queryKey: ["accounts"] });
-      toast.success("Account created");
+      if (acc?.warning) {
+        toast.warning(`Account saved as pending: ${acc.warning}`);
+      } else {
+        toast.success("Account created");
+      }
       onOpenChange(false);
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   const applyPlan = (planId: string) => {
     const p = plans?.find((x) => x.id === planId);
@@ -321,14 +331,16 @@ function TrialDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: 
       trial: true,
       expiresAt: new Date(Date.now() + Math.max(1, hours) * 3600_000).toISOString(),
     }),
-    onSuccess: () => {
+    onSuccess: (acc) => {
       qc.invalidateQueries({ queryKey: ["accounts"] });
-      toast.success(`Trial account created (${hours}h)`);
+      if (acc?.warning) toast.warning(`Trial saved as pending: ${acc.warning}`);
+      else toast.success(`Trial account created (${hours}h)`);
       onOpenChange(false);
       setUsername(""); setPassword(""); setTelegramId("");
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -432,10 +444,11 @@ function EditDialog({ id, onOpenChange }: { id: string | null; onOpenChange: (b:
                 <Select value={f.status} onValueChange={(v) => setF({ ...f, status: v as Account["status"] })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {(["active", "locked", "trial", "expired"] as Account["status"][]).map((s) =>
+                    {(["active", "locked", "trial", "expired", "pending", "suspended"] as Account["status"][]).map((s) =>
                       <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
+
               </div>
               {acc.protocol === "ssh" && (
                 <div className="col-span-2 space-y-1.5">
