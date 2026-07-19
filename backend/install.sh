@@ -161,7 +161,7 @@ ok "Cloudflare components removed."
 systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true
 
 # --------------------------------------------------------------------------
-say "Fetching Autoscript repo"
+say "Fetching GRVPN repo"
 if [[ -d "$INSTALL_ROOT/.git" ]]; then
   git -C "$INSTALL_ROOT" fetch --all
   git -C "$INSTALL_ROOT" reset --hard origin/main
@@ -375,7 +375,7 @@ install -m 755 "$INSTALL_ROOT/backend/cli.sh" /usr/local/bin/autoscript
 PANEL_URL="https://${PANEL_DOMAIN}:${PANEL_PORT}/${PANEL_PATH}/"
 CREDS_FILE="${CONF_DIR}/panel-credentials.txt"
 cat >"$CREDS_FILE" <<EOF
-Autoscript Panel credentials (keep this file secret)
+GRVPN Panel credentials (keep this file secret)
 ====================================================
 URL       : ${PANEL_URL}
 Username  : ${ADMIN_USER}

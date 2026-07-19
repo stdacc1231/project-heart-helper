@@ -293,7 +293,7 @@ uninstall_all() {
 menu() {
   clear || true
   cat <<EOF
-${BLD}${BLU}Autoscript Admin CLI${RST}
+${BLD}${BLU}GRVPN Admin CLI${RST}
 ==============================
  1) Show status
  2) Reset admin username
