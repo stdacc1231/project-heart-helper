@@ -79,8 +79,17 @@ async def cmd_me(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not accts:
         await update.message.reply_text("You have no accounts yet. /start to buy one.")
         return
-    lines = [f"• {a['protocol'].upper()} — {a['username']} (exp {a['expiresAt'][:10]})" for a in accts]
+    lines = []
+    for a in accts:
+        lines.append(f"• {a['protocol'].upper()} — {a['username']} (exp {a['expiresAt'][:10]})")
+        try:
+            detail = await agent("GET", f"/public/accounts/{a['id']}/detail")
+        except Exception:
+            detail = {}
+        for cdn in detail.get("cdns", []) or []:
+            lines.append(f"   ↳ CDN {cdn['name']}: {cdn['url']}  (replace host)")
     await update.message.reply_text("\n".join(lines))
+
 
 
 async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
