@@ -64,6 +64,7 @@ function LivePage() {
                 <TableCell className="mono text-xs">{r.ip}</TableCell>
                 <TableCell className="text-xs">{r.country}{r.city ? ` · ${r.city}` : ""}</TableCell>
                 <TableCell className="text-xs">{r.device}</TableCell>
+                <TableCell className="mono text-xs">↓ {fmtBps(r.downBps ?? 0)} · ↑ {fmtBps(r.upBps ?? 0)}</TableCell>
                 <TableCell className="mono text-xs">↓ {formatBytes(r.rxBytes)} · ↑ {formatBytes(r.txBytes)}</TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => kick.mutate(r.id)}>
