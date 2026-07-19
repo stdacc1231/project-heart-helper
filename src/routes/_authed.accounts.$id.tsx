@@ -246,20 +246,24 @@ function ProfileCard({ profile }: { profile: ConnectionProfile }) {
     await navigator.clipboard.writeText(text);
     toast.success("Copied");
   };
+  const isTls = profile.security === "tls";
   return (
-    <div className="rounded-md border bg-muted/25 p-3">
+    <div className={`group relative overflow-hidden rounded-lg border p-3 transition-colors ${isTls ? "border-primary/40 bg-primary/[0.04]" : "border-border/60 bg-muted/25"}`}>
+      <div className={`absolute inset-x-0 top-0 h-px ${isTls ? "bg-gradient-to-r from-transparent via-primary to-transparent" : "bg-gradient-to-r from-transparent via-muted-foreground/40 to-transparent"}`} />
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">{profile.label}</Badge>
-          <span className="font-mono text-xs text-muted-foreground">{profile.host}:{profile.port}{profile.path || ""}</span>
+          <Badge variant={isTls ? "default" : "outline"} className="mono uppercase">{isTls ? "TLS" : "nTLS"}</Badge>
+          <span className="mono text-xs font-medium">Port {profile.port}</span>
+          <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{profile.path || "—"}</span>
         </div>
         <Button variant="ghost" size="sm" onClick={() => copy(profile.link)}><Copy className="mr-1 h-4 w-4" /> Copy</Button>
       </div>
-      <div className="break-all rounded border bg-background/40 p-2 font-mono text-xs">{profile.link}</div>
-      {profile.text && profile.text !== profile.link && <Textarea readOnly value={profile.text} className="mt-2 font-mono text-xs" rows={4} />}
+      <div className="break-all rounded border bg-background/60 p-2 font-mono text-[11px] leading-relaxed">{profile.link}</div>
+      {profile.text && profile.text !== profile.link && <Textarea readOnly value={profile.text} className="mt-2 font-mono text-[11px]" rows={4} />}
     </div>
   );
 }
+
 
 function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
