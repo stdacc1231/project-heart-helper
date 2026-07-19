@@ -444,10 +444,11 @@ function EditDialog({ id, onOpenChange }: { id: string | null; onOpenChange: (b:
                 <Select value={f.status} onValueChange={(v) => setF({ ...f, status: v as Account["status"] })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {(["active", "locked", "trial", "expired"] as Account["status"][]).map((s) =>
+                    {(["active", "locked", "trial", "expired", "pending", "suspended"] as Account["status"][]).map((s) =>
                       <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
+
               </div>
               {acc.protocol === "ssh" && (
                 <div className="col-span-2 space-y-1.5">
