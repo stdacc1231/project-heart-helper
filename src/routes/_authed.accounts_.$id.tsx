@@ -162,20 +162,22 @@ function AccountDetail() {
         </Card>
 
 
-        <Card className="p-4 lg:col-span-2">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-medium">Account summary</h3>
-            <Button variant="outline" size="sm" onClick={() => {
-              const el = document.getElementById("account-summary-pre");
-              if (el) { navigator.clipboard.writeText(el.innerText); toast.success("Summary copied"); }
-            }}>
-              <Copy className="mr-1 h-4 w-4" /> Copy
-            </Button>
-          </div>
-          <pre id="account-summary-pre" className="whitespace-pre overflow-x-auto rounded-md border bg-background/60 p-4 font-mono text-[12px] leading-relaxed">
+        {data.protocol === "ssh" && (
+          <Card className="p-4 lg:col-span-2">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-medium">Account summary</h3>
+              <Button variant="outline" size="sm" onClick={() => {
+                const el = document.getElementById("account-summary-pre");
+                if (el) { navigator.clipboard.writeText(el.innerText); toast.success("Summary copied"); }
+              }}>
+                <Copy className="mr-1 h-4 w-4" /> Copy
+              </Button>
+            </div>
+            <pre id="account-summary-pre" className="whitespace-pre overflow-x-auto rounded-md border bg-background/60 p-4 font-mono text-[12px] leading-relaxed">
 {buildSummary(data, detail, limitBytes, remainingBytes, profiles)}
-          </pre>
-        </Card>
+            </pre>
+          </Card>
+        )}
 
         <Card className="p-4 lg:col-span-2">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
