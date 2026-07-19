@@ -165,9 +165,54 @@ function SettingsPage() {
         </div>
       </Card>
 
+      <Card className="p-6 space-y-3">
+        <div>
+          <h3 className="text-sm font-medium">SSH banner &amp; auto-suspend</h3>
+          <p className="text-xs text-muted-foreground">
+            HTML banner shown to SSH users. Pre-auth clients see server-wide vars; interactive
+            logins also get per-user vars. Auto-suspend locks accounts past expiry or over quota
+            every 60&nbsp;seconds.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4"
+            checked={f.autoSuspend ?? true}
+            onChange={(e) => setF({ ...f, autoSuspend: e.target.checked })}
+          />
+          Auto-suspend expired / over-quota accounts
+        </label>
+        <div className="space-y-1.5">
+          <Label>Banner template (HTML)</Label>
+          <textarea
+            className="min-h-[220px] w-full rounded-md border bg-background p-2 font-mono text-xs"
+            value={f.sshBanner ?? ""}
+            onChange={(e) => setF({ ...f, sshBanner: e.target.value })}
+            spellCheck={false}
+          />
+        </div>
+        <details className="rounded-md border bg-muted/30 p-3 text-xs">
+          <summary className="cursor-pointer font-medium">Available variables</summary>
+          <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {Object.entries(f.sshBannerVariables ?? {}).map(([k, desc]) => (
+              <div key={k} className="flex gap-2">
+                <code className="rounded bg-background px-1">{k}</code>
+                <span className="text-muted-foreground">{desc}</span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-muted-foreground">
+            Per-user variables (USERNAME, IP_LIMIT, DAYS_LEFT, USED_GB, QUOTA_GB, REMAINING_GB, STATUS,
+            EXPIRES) only render for interactive logins — pre-auth banners strip them.
+          </p>
+        </details>
+      </Card>
+
       <div className="flex gap-2">
         <Button onClick={() => save.mutate()} disabled={save.isPending}>Apply all settings</Button>
       </div>
+
 
       <Card className="p-6 space-y-3">
         <h3 className="text-sm font-medium">System</h3>
