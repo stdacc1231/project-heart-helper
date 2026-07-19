@@ -1485,9 +1485,11 @@ def account_detail_payload(aid: str):
             "loginUsername": login_user,
             "host": _proto_host(a["protocol"]), "tlsPorts": _tls_ports(), "plainPorts": _plain_ports(),
             "connectionProfiles": cfg.get("profiles", []),
+            "cdns": cdns_for_account(aid, a["protocol"]),
             "traffic": traffic,
             "liveRate": live,
             "usage": {"totalBytes": used, "limitBytes": limit_bytes, "remainingBytes": max(0, limit_bytes - used) if limit_bytes else 0}}
+
 
 
 
