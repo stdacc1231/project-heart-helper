@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AuthedIndexRouteImport } from './routes/_authed.index'
 import { Route as UIdRouteImport } from './routes/u.$id'
+import { Route as AuthedXrayRouteImport } from './routes/_authed.xray'
 import { Route as AuthedWalletRouteImport } from './routes/_authed.wallet'
 import { Route as AuthedUpdateRouteImport } from './routes/_authed.update'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed.settings'
@@ -46,6 +47,11 @@ const UIdRoute = UIdRouteImport.update({
   id: '/u/$id',
   path: '/u/$id',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthedXrayRoute = AuthedXrayRouteImport.update({
+  id: '/xray',
+  path: '/xray',
+  getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedWalletRoute = AuthedWalletRouteImport.update({
   id: '/wallet',
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthedSettingsRoute
   '/update': typeof AuthedUpdateRoute
   '/wallet': typeof AuthedWalletRoute
+  '/xray': typeof AuthedXrayRoute
   '/u/$id': typeof UIdRoute
   '/accounts/$id': typeof AuthedAccountsIdRoute
 }
@@ -152,6 +159,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthedSettingsRoute
   '/update': typeof AuthedUpdateRoute
   '/wallet': typeof AuthedWalletRoute
+  '/xray': typeof AuthedXrayRoute
   '/u/$id': typeof UIdRoute
   '/': typeof AuthedIndexRoute
   '/accounts/$id': typeof AuthedAccountsIdRoute
@@ -173,6 +181,7 @@ export interface FileRoutesById {
   '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/update': typeof AuthedUpdateRoute
   '/_authed/wallet': typeof AuthedWalletRoute
+  '/_authed/xray': typeof AuthedXrayRoute
   '/u/$id': typeof UIdRoute
   '/_authed/': typeof AuthedIndexRoute
   '/_authed/accounts_/$id': typeof AuthedAccountsIdRoute
@@ -195,6 +204,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/update'
     | '/wallet'
+    | '/xray'
     | '/u/$id'
     | '/accounts/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -213,6 +223,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/update'
     | '/wallet'
+    | '/xray'
     | '/u/$id'
     | '/'
     | '/accounts/$id'
@@ -233,6 +244,7 @@ export interface FileRouteTypes {
     | '/_authed/settings'
     | '/_authed/update'
     | '/_authed/wallet'
+    | '/_authed/xray'
     | '/u/$id'
     | '/_authed/'
     | '/_authed/accounts_/$id'
@@ -273,6 +285,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/u/$id'
       preLoaderRoute: typeof UIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authed/xray': {
+      id: '/_authed/xray'
+      path: '/xray'
+      fullPath: '/xray'
+      preLoaderRoute: typeof AuthedXrayRouteImport
+      parentRoute: typeof AuthedRoute
     }
     '/_authed/wallet': {
       id: '/_authed/wallet'
@@ -389,6 +408,7 @@ interface AuthedRouteChildren {
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedUpdateRoute: typeof AuthedUpdateRoute
   AuthedWalletRoute: typeof AuthedWalletRoute
+  AuthedXrayRoute: typeof AuthedXrayRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
   AuthedAccountsIdRoute: typeof AuthedAccountsIdRoute
 }
@@ -407,6 +427,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedUpdateRoute: AuthedUpdateRoute,
   AuthedWalletRoute: AuthedWalletRoute,
+  AuthedXrayRoute: AuthedXrayRoute,
   AuthedIndexRoute: AuthedIndexRoute,
   AuthedAccountsIdRoute: AuthedAccountsIdRoute,
 }
