@@ -21,6 +21,7 @@ import { Route as AuthedPaymentsRouteImport } from './routes/_authed.payments'
 import { Route as AuthedLogsRouteImport } from './routes/_authed.logs'
 import { Route as AuthedInvoicesRouteImport } from './routes/_authed.invoices'
 import { Route as AuthedConnectionsRouteImport } from './routes/_authed.connections'
+import { Route as AuthedCdnsRouteImport } from './routes/_authed.cdns'
 import { Route as AuthedBotRouteImport } from './routes/_authed.bot'
 import { Route as AuthedBackupsRouteImport } from './routes/_authed.backups'
 import { Route as AuthedAlertsRouteImport } from './routes/_authed.alerts'
@@ -86,6 +87,11 @@ const AuthedConnectionsRoute = AuthedConnectionsRouteImport.update({
   path: '/connections',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedCdnsRoute = AuthedCdnsRouteImport.update({
+  id: '/cdns',
+  path: '/cdns',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedBotRoute = AuthedBotRouteImport.update({
   id: '/bot',
   path: '/bot',
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/alerts': typeof AuthedAlertsRoute
   '/backups': typeof AuthedBackupsRoute
   '/bot': typeof AuthedBotRoute
+  '/cdns': typeof AuthedCdnsRoute
   '/connections': typeof AuthedConnectionsRoute
   '/invoices': typeof AuthedInvoicesRoute
   '/logs': typeof AuthedLogsRoute
@@ -136,6 +143,7 @@ export interface FileRoutesByTo {
   '/alerts': typeof AuthedAlertsRoute
   '/backups': typeof AuthedBackupsRoute
   '/bot': typeof AuthedBotRoute
+  '/cdns': typeof AuthedCdnsRoute
   '/connections': typeof AuthedConnectionsRoute
   '/invoices': typeof AuthedInvoicesRoute
   '/logs': typeof AuthedLogsRoute
@@ -156,6 +164,7 @@ export interface FileRoutesById {
   '/_authed/alerts': typeof AuthedAlertsRoute
   '/_authed/backups': typeof AuthedBackupsRoute
   '/_authed/bot': typeof AuthedBotRoute
+  '/_authed/cdns': typeof AuthedCdnsRoute
   '/_authed/connections': typeof AuthedConnectionsRoute
   '/_authed/invoices': typeof AuthedInvoicesRoute
   '/_authed/logs': typeof AuthedLogsRoute
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/backups'
     | '/bot'
+    | '/cdns'
     | '/connections'
     | '/invoices'
     | '/logs'
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/backups'
     | '/bot'
+    | '/cdns'
     | '/connections'
     | '/invoices'
     | '/logs'
@@ -213,6 +224,7 @@ export interface FileRouteTypes {
     | '/_authed/alerts'
     | '/_authed/backups'
     | '/_authed/bot'
+    | '/_authed/cdns'
     | '/_authed/connections'
     | '/_authed/invoices'
     | '/_authed/logs'
@@ -318,6 +330,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedConnectionsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/cdns': {
+      id: '/_authed/cdns'
+      path: '/cdns'
+      fullPath: '/cdns'
+      preLoaderRoute: typeof AuthedCdnsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/bot': {
       id: '/_authed/bot'
       path: '/bot'
@@ -361,6 +380,7 @@ interface AuthedRouteChildren {
   AuthedAlertsRoute: typeof AuthedAlertsRoute
   AuthedBackupsRoute: typeof AuthedBackupsRoute
   AuthedBotRoute: typeof AuthedBotRoute
+  AuthedCdnsRoute: typeof AuthedCdnsRoute
   AuthedConnectionsRoute: typeof AuthedConnectionsRoute
   AuthedInvoicesRoute: typeof AuthedInvoicesRoute
   AuthedLogsRoute: typeof AuthedLogsRoute
@@ -378,6 +398,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedAlertsRoute: AuthedAlertsRoute,
   AuthedBackupsRoute: AuthedBackupsRoute,
   AuthedBotRoute: AuthedBotRoute,
+  AuthedCdnsRoute: AuthedCdnsRoute,
   AuthedConnectionsRoute: AuthedConnectionsRoute,
   AuthedInvoicesRoute: AuthedInvoicesRoute,
   AuthedLogsRoute: AuthedLogsRoute,
