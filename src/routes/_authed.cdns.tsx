@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { api, type Cdn, type CdnProtoGroup } from "@/lib/api";
+import { api, type Cdn } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/cdns")({
@@ -16,7 +16,8 @@ export const Route = createFileRoute("/_authed/cdns")({
   component: CdnsPage,
 });
 
-const EMPTY: Partial<Cdn> = { name: "", url: "", protocols: [], accountIds: [] };
+// CDN endpoints are Xray-only (SSH uses its own domain). We hardcode protocols=["xray"].
+const EMPTY: Partial<Cdn> = { name: "", url: "", protocols: ["xray"], accountIds: [] };
 
 function CdnsPage() {
   const qc = useQueryClient();
