@@ -220,12 +220,33 @@ function AccountDetail() {
           })()}
         </Card>
 
-
+        {(detail?.cdns ?? []).length > 0 && (
+          <Card className="p-4 lg:col-span-2">
+            <h3 className="mb-2 text-sm font-medium">CDN endpoints</h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Users can swap the host in their client for any of these CDN domains.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {detail!.cdns!.map((c) => (
+                <div key={c.id} className="rounded-md border bg-muted/30 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">{c.name}</span>
+                    <Button variant="ghost" size="icon" onClick={() => { navigator.clipboard.writeText(c.url); toast.success("Copied"); }}>
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <div className="break-all font-mono text-sm">{c.url}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
       </div>
     </div>
   );
 }
+
 
 function Metric({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub: string }) {
   return (
