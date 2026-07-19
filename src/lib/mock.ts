@@ -337,13 +337,19 @@ export const mock = {
       txBytes: Math.floor(600_000_000 * (0.4 + Math.random() * 0.8)),
     }));
     const plan = db.plans.find((p) => p.id === a.planId);
+    const group = a.protocol === "ssh" ? "ssh" : "xray";
+    const cdns = db.cdns.filter((c) =>
+      (!c.protocols.length || c.protocols.includes(group as any)) &&
+      (!c.accountIds.length || c.accountIds.includes(id))
+    );
     return {
       account: a, planName: plan?.name,
       configLink: cfg.link, configText: cfg.text, subscriptionUrl: sub.url,
       daysRemaining: Math.max(0, Math.floor((Date.parse(a.expiresAt) - now) / 86400_000)),
-      hourly, daily,
+      hourly, daily, cdns,
       activeIps: db.connections.filter((c) => c.accountId === id).map((c) => ({ ip: c.ip, country: c.country, lastSeen: c.connectedAt })),
     };
+
   },
 
 
