@@ -2,12 +2,13 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Users, ScrollText, Settings, RefreshCw, LogOut, Menu,
   CreditCard, Package, Bot, Activity, Cloud, HardDrive, BellRing,
-  Wallet, FileText, ShieldCheck,
+  Wallet, FileText, ShieldCheck, Sun, Moon,
 } from "lucide-react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
