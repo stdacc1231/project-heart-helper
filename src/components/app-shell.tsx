@@ -2,12 +2,13 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Users, ScrollText, Settings, RefreshCw, LogOut, Menu,
   CreditCard, Package, Bot, Activity, Cloud, HardDrive, BellRing,
-  Wallet, FileText, ShieldCheck,
+  Wallet, FileText, ShieldCheck, Sun, Moon,
 } from "lucide-react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -44,6 +45,19 @@ const groups: NavGroup[] = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  useEffect(() => {
+    const t = (typeof localStorage !== "undefined" && localStorage.getItem("theme")) === "light" ? "light" : "dark";
+    setTheme(t);
+  }, []);
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    const d = document.documentElement;
+    d.classList.toggle("dark", next === "dark");
+    d.classList.toggle("light", next === "light");
+    try { localStorage.setItem("theme", next); } catch {}
+  };
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: () => api.auth.me() });
@@ -56,6 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const active = (to: string) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
   const currentLabel = groups.flatMap((g) => g.items).find((i) => active(i.to))?.label ?? "Dashboard";
+
 
   return (
     <div className="min-h-screen aurora-bg text-foreground">
@@ -139,8 +154,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">/panel</div>
             <div className="font-display text-lg font-semibold leading-none">{currentLabel}</div>
           </div>
-          <div className="ml-auto hidden items-center gap-2 md:flex">
-            <div className="mono flex items-center gap-2 rounded-md border border-border/60 bg-card/60 px-3 py-1.5 text-xs">
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme" title="Toggle theme">
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <div className="mono hidden items-center gap-2 rounded-md border border-border/60 bg-card/60 px-3 py-1.5 text-xs md:flex">
               <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_var(--color-primary)]" />
               <span className="text-muted-foreground">agent</span>
               <span>online</span>
@@ -151,6 +169,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span>Cloudflare</span>
             </div>
           </div>
+
         </header>
         <main className="p-4 lg:p-8">{children}</main>
       </div>
