@@ -1,9 +1,10 @@
 // Mock backend for Lovable preview. Real Python agent replaces this on the VPS.
 import type {
-  Account, Alert, Backup, BotSettings, Invoice, LiveConnection, LogEntry,
+  Account, Alert, Backup, BotSettings, Cdn, Invoice, LiveConnection, LogEntry,
   PanelSettings, Payment, Plan, Protocol, SystemStatus, TrafficPoint,
   UserDetail, VersionInfo, WalletTx,
 } from "./api";
+
 
 
 const STORAGE = "autoscript_mock_v4";
@@ -24,8 +25,9 @@ interface MockDB {
   wallet: WalletTx[];
   walletBalanceCents: number;
   invoices: Invoice[];
-  
+  cdns: Cdn[];
 }
+
 
 function load(): MockDB {
   if (typeof window === "undefined") return seed();
@@ -75,8 +77,8 @@ function seed(): MockDB {
         status: "active",
         telegramId: i % 2 ? String(500000000 + i * 137) : undefined,
         planId: plans[i % plans.length].id,
-        cdn: protocol === "vmess" || protocol === "vless",
         subscriptionToken: tok(),
+
         trial: false,
       });
 
@@ -156,8 +158,8 @@ function seed(): MockDB {
     domain: "panel.example.com", port: 443, tlsMode: "single",
     dnsProvider: "dns_cf", rootDomain: "example.com",
     dbPath: "/etc/autoscript/db.sqlite", repoUrl: "https://github.com/your-user/autoscript.git",
-    cdn: { enabled: true, provider: "cloudflare", realIpHeader: "CF-Connecting-IP" },
     bbr: true,
+
     tlsPorts:   [443, 2053, 2083, 2087, 2096, 8443],
     plainPorts: [80, 8080, 8880, 2052, 2082, 2086, 2095],
     endpoints: {},
@@ -166,9 +168,10 @@ function seed(): MockDB {
   return {
     loggedIn: false, accounts, logs, plans, payments, bot, settings,
     startedAt: now - 3 * day, connections, backups, alerts,
-    wallet, walletBalanceCents: 1200, invoices,
+    wallet, walletBalanceCents: 1200, invoices, cdns: [],
   };
 }
+
 
 
 const wait = (ms = 120) => new Promise((r) => setTimeout(r, ms));
@@ -239,7 +242,7 @@ export const mock = {
       quotaGb: input.quotaGb ?? 0, usedBytes: 0, online: 0,
       status: trial ? "trial" : "active",
       telegramId: input.telegramId, planId: input.planId, note: input.note,
-      cdn: input.cdn ?? false, subscriptionToken: tok(), trial,
+      subscriptionToken: tok(), trial,
     };
     db.accounts.unshift(a);
     audit(db, "account.create", `Created ${a.protocol} account ${a.username}${trial ? " (trial)" : ""}`, a.username);
@@ -334,13 +337,19 @@ export const mock = {
       txBytes: Math.floor(600_000_000 * (0.4 + Math.random() * 0.8)),
     }));
     const plan = db.plans.find((p) => p.id === a.planId);
+    const group = a.protocol === "ssh" ? "ssh" : "xray";
+    const cdns = db.cdns.filter((c) =>
+      (!c.protocols.length || c.protocols.includes(group as any)) &&
+      (!c.accountIds.length || c.accountIds.includes(id))
+    );
     return {
       account: a, planName: plan?.name,
       configLink: cfg.link, configText: cfg.text, subscriptionUrl: sub.url,
       daysRemaining: Math.max(0, Math.floor((Date.parse(a.expiresAt) - now) / 86400_000)),
-      hourly, daily,
+      hourly, daily, cdns,
       activeIps: db.connections.filter((c) => c.accountId === id).map((c) => ({ ip: c.ip, country: c.country, lastSeen: c.connectedAt })),
     };
+
   },
 
 
@@ -392,4 +401,26 @@ export const mock = {
   async settingsSave(s: Partial<PanelSettings>) { const db = load(); Object.assign(db.settings, s); save(db); return db.settings; },
 
   async logs(type?: "audit" | "service" | "auth") { const db = load(); return type ? db.logs.filter((l) => l.type === type) : db.logs; },
+
+  async listCdns() { return load().cdns; },
+  async saveCdn(c: Partial<Cdn>) {
+    const db = load();
+    if (c.id) {
+      const ex = db.cdns.find((x) => x.id === c.id);
+      if (!ex) throw new Error("Not found");
+      Object.assign(ex, c);
+      save(db); return ex;
+    }
+    const created: Cdn = {
+      id: "cdn-" + Date.now().toString(36),
+      name: c.name ?? "Untitled",
+      url: c.url ?? "",
+      protocols: c.protocols ?? [],
+      accountIds: c.accountIds ?? [],
+      createdAt: new Date().toISOString(),
+    };
+    db.cdns.unshift(created); save(db); return created;
+  },
+  async removeCdn(id: string) { const db = load(); db.cdns = db.cdns.filter((c) => c.id !== id); save(db); return { ok: true as const }; },
 };
+

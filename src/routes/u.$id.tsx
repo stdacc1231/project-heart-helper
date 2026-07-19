@@ -111,9 +111,33 @@ function UserStatusPage() {
         </div>
       </Card>
 
+      {(data.cdns ?? []).length > 0 && (
+        <Card className="mt-4 p-4">
+          <h2 className="mb-2 text-sm font-medium">CDN endpoints</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Replace the host field in your client with any of these CDN domains to route traffic through it.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {data.cdns!.map((c) => (
+              <div key={c.id} className="rounded-md border bg-muted/30 p-3">
+                <div className="text-xs text-muted-foreground">{c.name}</div>
+                <div
+                  className="mt-1 cursor-pointer break-all font-mono text-sm hover:underline"
+                  onClick={() => { navigator.clipboard.writeText(c.url); }}
+                  title="Click to copy"
+                >
+                  {c.url}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
     </Shell>
   );
 }
+
 
 function Shell({ children }: { children: ReactNode }) {
   return <main className="mx-auto min-h-screen max-w-5xl px-4 py-8">{children}</main>;

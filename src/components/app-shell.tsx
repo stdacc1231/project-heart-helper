@@ -5,6 +5,7 @@ import {
   Wallet, FileText, ShieldCheck, Sun, Moon,
 } from "lucide-react";
 
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -33,6 +34,7 @@ const groups: NavGroup[] = [
     { to: "/wallet",      label: "Wallet",       icon: Wallet },
   ]},
   { label: "System", items: [
+    { to: "/cdns",        label: "CDN endpoints",icon: Cloud },
     { to: "/backups",     label: "Backups",      icon: HardDrive },
     { to: "/bot",         label: "Telegram Bot", icon: Bot },
     { to: "/logs",        label: "Logs",         icon: ScrollText },
@@ -40,6 +42,7 @@ const groups: NavGroup[] = [
     { to: "/settings",    label: "Settings",     icon: Settings },
   ]},
 ];
+
 
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -163,14 +166,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="text-muted-foreground">agent</span>
               <span>online</span>
             </div>
-            <div className="mono hidden items-center gap-2 rounded-md border border-border/60 bg-card/60 px-3 py-1.5 text-xs lg:flex">
-              <Cloud className="h-3.5 w-3.5 text-accent" />
-              <span className="text-muted-foreground">CDN</span>
-              <span>Cloudflare</span>
-            </div>
           </div>
 
         </header>
+
         <main className="p-4 lg:p-8">{children}</main>
       </div>
     </div>

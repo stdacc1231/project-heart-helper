@@ -30,8 +30,8 @@ export interface Account {
   telegramId?: string;
   planId?: string;
   note?: string;
-  cdn?: boolean;             // route through Cloudflare
   subscriptionToken?: string;
+
   trial?: boolean;
 }
 
@@ -107,8 +107,8 @@ export interface PanelSettings {
   rootDomain?: string;
   dbPath: string;
   repoUrl: string;
-  cdn?: { enabled: boolean; provider: "cloudflare" | "custom"; realIpHeader: string };
   bbr?: boolean;
+
   // Multi-port TLS/plain listeners (Cloudflare-supported)
   tlsPorts: number[];      // e.g. [443, 2053, 2083, 2087, 2096, 8443]
   plainPorts: number[];    // e.g. [80, 8080, 8880, 2052, 2082, 2086, 2095]
@@ -199,6 +199,7 @@ export interface UserDetail {
   tlsPorts?: number[];
   plainPorts?: number[];
   connectionProfiles?: ConnectionProfile[];
+  cdns?: Cdn[];
   usage?: { totalBytes: number; limitBytes: number; remainingBytes: number };
   liveRate?: { upBps: number; downBps: number; at: string | null };
   traffic?: {
@@ -209,6 +210,17 @@ export interface UserDetail {
     daily: { day: string; rxBytes: number; txBytes: number; totalBytes: number }[];
   };
 }
+
+export type CdnProtoGroup = "ssh" | "xray";
+export interface Cdn {
+  id: string;
+  name: string;
+  url: string;
+  protocols: CdnProtoGroup[];      // empty = both
+  accountIds: string[];            // empty = every account matching protocols
+  createdAt: string;
+}
+
 
 
 export interface Backup {
@@ -351,7 +363,13 @@ export const api = {
   logs: {
     async list(type?: "audit" | "service" | "auth") { return IS_PREVIEW ? mock.logs(type) : req<LogEntry[]>(`/logs${type ? `?type=${type}` : ""}`); },
   },
+  cdns: {
+    async list() { return IS_PREVIEW ? mock.listCdns() : req<Cdn[]>("/cdns"); },
+    async save(c: Partial<Cdn>) { return IS_PREVIEW ? mock.saveCdn(c) : req<Cdn>(c.id ? `/cdns/${c.id}` : "/cdns", { method: c.id ? "PATCH" : "POST", body: JSON.stringify(c) }); },
+    async remove(id: string) { return IS_PREVIEW ? mock.removeCdn(id) : req(`/cdns/${id}`, { method: "DELETE" }); },
+  },
 };
+
 
 export function formatBytes(n: number) {
   if (!n) return "0 B";
