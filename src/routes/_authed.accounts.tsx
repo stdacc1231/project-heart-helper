@@ -145,8 +145,12 @@ function AccountsPage() {
                   <Badge variant="outline" className={
                     a.status === "active" ? "border-primary/40 text-primary" :
                     a.status === "trial"  ? "border-accent/40 text-accent" :
-                    a.status === "locked" ? "border-warning/40 text-warning" : "border-destructive/40 text-destructive"
+                    a.status === "pending" ? "border-warning/40 text-warning" :
+                    a.status === "locked" ? "border-warning/40 text-warning" :
+                    a.status === "suspended" ? "border-destructive/40 text-destructive" :
+                    "border-destructive/40 text-destructive"
                   }>{a.status}</Badge>
+
                 </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" title="Copy subscription URL" onClick={() => copySub(a.id)}><Copy className="h-4 w-4" /></Button>
