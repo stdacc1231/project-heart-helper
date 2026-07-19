@@ -476,23 +476,6 @@ def _vmess_link(username: str, host: str, port: int, uid: str, *, tls: bool) -> 
     return "vmess://" + base64.b64encode(json.dumps(cfg, separators=(",", ":")).encode()).decode()
 
 
-def _xray_uri(proto: str, username: str, host: str, port: int, uid: str, *, tls: bool, network: str = "ws") -> str:
-    path = f"/{proto}" if network == "ws" else f"/{proto}-xh"
-    security = "tls" if tls else "none"
-    suffix = quote(username, safe="")
-    if proto == "vless":
-        return f"vless://{uid}@{host}:{port}?type={network}&security={security}&host={quote(host)}&path={quote(path, safe='')}&sni={quote(host)}#{suffix}"
-    return f"trojan://{uid}@{host}:{port}?type={network}&security={security}&host={quote(host)}&path={quote(path, safe='')}&sni={quote(host)}#{suffix}"
-
-
-def _vmess_link_net(username: str, host: str, port: int, uid: str, *, tls: bool, network: str = "ws") -> str:
-    path = "/vmess" if network == "ws" else "/vmess-xh"
-    cfg = {
-        "v": "2", "ps": username, "add": host, "port": str(port), "id": uid,
-        "aid": "0", "scy": "auto", "net": network, "type": "none",
-        "host": host, "path": path, "tls": "tls" if tls else "", "sni": host if tls else "",
-    }
-    return "vmess://" + base64.b64encode(json.dumps(cfg, separators=(",", ":")).encode()).decode()
 
 
 def _xray_uri(proto: str, username: str, host: str, port: int, uid: str, *, tls: bool, network: str = "ws") -> str:
