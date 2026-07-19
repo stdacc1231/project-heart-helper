@@ -1507,6 +1507,90 @@ def accounts_send_telegram(aid: str, user: str = Depends(require_auth)):
     return {"ok": True}
 
 
+# ---- CDN entries -----------------------------------------------------------
+def _cdn_row(r: sqlite3.Row) -> dict:
+    return {
+        "id": r["id"], "name": r["name"], "url": r["url"],
+        "protocols": [x for x in (r["protocols"] or "").split(",") if x],
+        "accountIds": [x for x in (r["account_ids"] or "").split(",") if x],
+        "createdAt": r["created_at"],
+    }
+
+
+def cdns_for_account(aid: str, protocol: str) -> list[dict]:
+    group = "ssh" if protocol == "ssh" else "xray"
+    with db() as c:
+        rows = c.execute("SELECT * FROM cdns ORDER BY created_at DESC").fetchall()
+    out = []
+    for r in rows:
+        cdn = _cdn_row(r)
+        if cdn["protocols"] and group not in cdn["protocols"]:
+            continue
+        if cdn["accountIds"] and aid not in cdn["accountIds"]:
+            continue
+        out.append(cdn)
+    return out
+
+
+class CdnIn(BaseModel):
+    name: Optional[str] = None
+    url: Optional[str] = None
+    protocols: Optional[list[str]] = None    # ["ssh","xray"]
+    accountIds: Optional[list[str]] = None   # empty = all matching accounts
+
+
+@app.get("/cdns")
+def cdns_list(_: str = Depends(require_auth)):
+    with db() as c:
+        rows = c.execute("SELECT * FROM cdns ORDER BY created_at DESC").fetchall()
+    return [_cdn_row(r) for r in rows]
+
+
+@app.post("/cdns")
+def cdns_create(inp: CdnIn, user: str = Depends(require_auth)):
+    name = (inp.name or "").strip()
+    url = (inp.url or "").strip()
+    if not name or not url:
+        raise HTTPException(400, "Name and URL are required")
+    protos = ",".join(p for p in (inp.protocols or []) if p in ("ssh", "xray"))
+    aids = ",".join(x.strip() for x in (inp.accountIds or []) if x.strip())
+    cid = "cdn-" + _uuid.uuid4().hex[:8]
+    with db() as c:
+        c.execute("INSERT INTO cdns(id,name,url,protocols,account_ids,created_at) VALUES(?,?,?,?,?,?)",
+                  (cid, name, url, protos, aids, datetime.now(timezone.utc).isoformat()))
+        r = c.execute("SELECT * FROM cdns WHERE id = ?", (cid,)).fetchone()
+    log("audit", "cdn.create", f"Added CDN {name}", actor=user)
+    return _cdn_row(r)
+
+
+@app.patch("/cdns/{cid}")
+def cdns_update(cid: str, inp: CdnIn, user: str = Depends(require_auth)):
+    with db() as c:
+        r = c.execute("SELECT * FROM cdns WHERE id = ?", (cid,)).fetchone()
+        if not r:
+            raise HTTPException(404, "Not found")
+        name = (inp.name or r["name"]).strip()
+        url = (inp.url or r["url"]).strip()
+        protos = ",".join(p for p in (inp.protocols or []) if p in ("ssh", "xray")) if inp.protocols is not None else r["protocols"]
+        aids = ",".join(x.strip() for x in (inp.accountIds or []) if x.strip()) if inp.accountIds is not None else r["account_ids"]
+        c.execute("UPDATE cdns SET name=?, url=?, protocols=?, account_ids=? WHERE id=?",
+                  (name, url, protos, aids, cid))
+        r = c.execute("SELECT * FROM cdns WHERE id = ?", (cid,)).fetchone()
+    log("audit", "cdn.update", f"Updated CDN {name}", actor=user)
+    return _cdn_row(r)
+
+
+@app.delete("/cdns/{cid}")
+def cdns_delete(cid: str, user: str = Depends(require_auth)):
+    with db() as c:
+        c.execute("DELETE FROM cdns WHERE id = ?", (cid,))
+    log("audit", "cdn.delete", f"Removed CDN {cid}", actor=user, level="warn")
+    return {"ok": True}
+
+
+
+
+
 @app.post("/accounts/{aid}/rotate-token")
 def accounts_rotate_token(aid: str, user: str = Depends(require_auth)):
     accounts_get(aid, user)
