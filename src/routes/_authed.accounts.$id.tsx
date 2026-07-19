@@ -175,16 +175,39 @@ function AccountDetail() {
 
         <Card className="p-4 lg:col-span-2">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-medium">All connection settings</h3>
+            <div>
+              <h3 className="text-sm font-medium">Connection settings</h3>
+              <p className="text-xs text-muted-foreground">
+                Featured: TLS <span className="font-mono">443</span> · Plain <span className="font-mono">80</span>.
+                Also works on TLS {(detail?.tlsPorts ?? []).join(", ") || "—"} and Plain {(detail?.plainPorts ?? []).join(", ") || "—"}.
+              </p>
+            </div>
             <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(detail?.subscriptionUrl ?? ""); toast.success("User status link copied"); }}>
               <Copy className="mr-1 h-4 w-4" /> User status link
             </Button>
           </div>
           <div className="grid gap-3">
-            {profiles.map((p) => <ProfileCard key={`${p.label}-${p.port}`} profile={p} />)}
-            {profiles.length === 0 && <div className="text-sm text-muted-foreground">No connection profiles generated.</div>}
+            {(() => {
+              const featured = profiles.filter((p) => p.port === 443 || p.port === 80);
+              const rest = profiles.filter((p) => p.port !== 443 && p.port !== 80);
+              return (
+                <>
+                  {featured.map((p) => <ProfileCard key={`f-${p.label}-${p.port}`} profile={p} />)}
+                  {rest.length > 0 && (
+                    <details className="rounded-md border bg-muted/20 p-3">
+                      <summary className="cursor-pointer text-xs text-muted-foreground">Show {rest.length} more profiles for other Cloudflare ports</summary>
+                      <div className="mt-3 grid gap-3">
+                        {rest.map((p) => <ProfileCard key={`r-${p.label}-${p.port}`} profile={p} />)}
+                      </div>
+                    </details>
+                  )}
+                  {profiles.length === 0 && <div className="text-sm text-muted-foreground">No connection profiles generated.</div>}
+                </>
+              );
+            })()}
           </div>
         </Card>
+
       </div>
     </div>
   );
