@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 # Provision an SSH user. Env: USERNAME (panel user), SYSTEM_USERNAME (Linux user), PASSWORD, EXPIRES (ISO date)
-set -euo pipefail
-: "${USERNAME:?}"; : "${PASSWORD:?}"; : "${EXPIRES:?}"
-SYSUSER="${SYSTEM_USERNAME:-grvpn-${USERNAME}}"
-EXPIRE_DAY=$(date -d "$EXPIRES" +%F)
+# Non-essential steps (banner, sshd reload) never fail the whole run.
+set -u
+: "${USERNAME:?USERNAME is required}"
+: "${PASSWORD:?PASSWORD is required}"
+: "${EXPIRES:?EXPIRES is required}"
 
-# --- Per-user login shell: shows the panel banner (with live user stats) then exits.
-# Port-forwarding clients (ssh -N / SSH-WS tunnels) never invoke the shell, so
-# tunneling keeps working; interactive clients see the banner and disconnect.
-if [ ! -x /usr/local/bin/grvpn-motd ]; then
-  cat >/usr/local/bin/grvpn-motd <<'MOTD'
+SYSUSER="${SYSTEM_USERNAME:-grvpn-${USERNAME}}"
+EXPIRE_DAY="$(date -d "$EXPIRES" +%F 2>/dev/null || echo '')"
+if [ -z "$EXPIRE_DAY" ]; then
+  # Fall back to ISO prefix if `date -d` can't parse the value.
+  EXPIRE_DAY="${EXPIRES:0:10}"
+fi
+
+# ---- soft steps (banner shell, banner file, sshd banner directive) --------
+{
+  if [ ! -x /usr/local/bin/grvpn-motd ]; then
+    cat >/usr/local/bin/grvpn-motd <<'MOTD'
 #!/usr/bin/env bash
-# Render the per-user SSH MOTD from the panel's banner template.
 TOKEN_FILE="/etc/autoscript/agent.env"
-TOKEN=""
-PORT=""
+TOKEN=""; PORT=""
 if [ -r "$TOKEN_FILE" ]; then
   TOKEN=$(grep -E '^BOT_INTERNAL_TOKEN=' "$TOKEN_FILE" | tail -n1 | cut -d= -f2- | tr -d '"'"'"'')
   PORT=$(grep -E '^AGENT_PORT=' "$TOKEN_FILE" | tail -n1 | cut -d= -f2- | tr -d '"'"'"'')
@@ -28,40 +33,49 @@ HTML=$(curl -fsSk --max-time 3 -H "X-Internal-Token: ${TOKEN}" \
 if [ -z "$HTML" ] && [ -r /etc/grvpn-ssh-banner.html ]; then
   HTML=$(cat /etc/grvpn-ssh-banner.html)
 fi
-# Strip HTML tags for the terminal; keep line breaks.
 printf '%s\n' "$HTML" | sed -e 's/<br[^>]*>/\n/gI' -e 's/<\/h[1-6]>/\n/gI' -e 's/<[^>]*>//g' -e '/^\s*$/d'
 sleep 2
 exit 0
 MOTD
-  chmod 0755 /usr/local/bin/grvpn-motd
-fi
-# Whitelist the login shell so `useradd -s` is accepted.
-if ! grep -qx '/usr/local/bin/grvpn-motd' /etc/shells 2>/dev/null; then
-  echo '/usr/local/bin/grvpn-motd' >> /etc/shells
-fi
-
-# --- Pre-auth banner (server-wide info). The panel agent refreshes this file
-# every 5 minutes with live counters from the template stored in settings.
-if [ ! -f /etc/grvpn-ssh-banner.html ]; then
-  cat >/etc/grvpn-ssh-banner.html <<'BANNER'
+    chmod 0755 /usr/local/bin/grvpn-motd || true
+  fi
+  if ! grep -qx '/usr/local/bin/grvpn-motd' /etc/shells 2>/dev/null; then
+    echo '/usr/local/bin/grvpn-motd' >> /etc/shells || true
+  fi
+  if [ ! -f /etc/grvpn-ssh-banner.html ]; then
+    cat >/etc/grvpn-ssh-banner.html <<'BANNER'
 <div style="text-align:center;">
-    <h4><font color="#ffff">⚡️GR VPN SSH</font></h4>
-    <h4><font color="green">⚡️Term of services</font></h4>
-    <h3><font color="yellow">⚡️No Spam</font></h3>
-    <h3><font color="#ffff">⚡️No Hacking</font></h3>
-    <h3><font color="blue">⚡️No DDOS</font></h3>
-    <h1><font color="#F6BE00">⚡️No Multi login, Auto delete</font></h1>
-    <h3><font color="red">GR VPN</font></h3>
+    <h4>GR VPN SSH</h4>
 </div>
 BANNER
-fi
-if ! grep -q '^Banner /etc/grvpn-ssh-banner.html' /etc/ssh/sshd_config 2>/dev/null; then
-  sed -i '/^Banner /d' /etc/ssh/sshd_config 2>/dev/null || true
-  printf '\nBanner /etc/grvpn-ssh-banner.html\n' >> /etc/ssh/sshd_config
+  fi
+  if ! grep -q '^Banner /etc/grvpn-ssh-banner.html' /etc/ssh/sshd_config 2>/dev/null; then
+    sed -i '/^Banner /d' /etc/ssh/sshd_config 2>/dev/null || true
+    printf '\nBanner /etc/grvpn-ssh-banner.html\n' >> /etc/ssh/sshd_config 2>/dev/null || true
+  fi
+} 2>/dev/null || true
+
+# ---- ESSENTIAL: user create / update + password ---------------------------
+# Prefer the panel banner shell; fall back to /bin/false if not registered as a valid shell.
+SHELL_PATH=/usr/local/bin/grvpn-motd
+if ! grep -qx "$SHELL_PATH" /etc/shells 2>/dev/null; then
+  SHELL_PATH=/bin/false
 fi
 
-useradd -m -s /usr/local/bin/grvpn-motd -e "$EXPIRE_DAY" -c "GRVPN panel:${USERNAME}" "$SYSUSER" 2>/dev/null \
-  || usermod -s /usr/local/bin/grvpn-motd -e "$EXPIRE_DAY" -c "GRVPN panel:${USERNAME}" "$SYSUSER"
-echo "${SYSUSER}:${PASSWORD}" | chpasswd
+if id "$SYSUSER" >/dev/null 2>&1; then
+  usermod -s "$SHELL_PATH" -e "$EXPIRE_DAY" -c "GRVPN panel:${USERNAME}" "$SYSUSER" \
+    || { echo "usermod failed for $SYSUSER" >&2; exit 1; }
+else
+  useradd -m -s "$SHELL_PATH" -e "$EXPIRE_DAY" -c "GRVPN panel:${USERNAME}" "$SYSUSER" \
+    || useradd -m -s /bin/false -e "$EXPIRE_DAY" -c "GRVPN panel:${USERNAME}" "$SYSUSER" \
+    || { echo "useradd failed for $SYSUSER" >&2; exit 1; }
+fi
+
+echo "${SYSUSER}:${PASSWORD}" | chpasswd \
+  || { echo "chpasswd failed for $SYSUSER" >&2; exit 1; }
+
+# Reload SSH so the banner change is picked up; never fatal.
 systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+
 echo "provisioned ssh user $SYSUSER for panel user $USERNAME (expires $EXPIRE_DAY)"
+exit 0
