@@ -117,6 +117,8 @@ export interface PanelSettings {
   sshBanner?: string;
   sshBannerVariables?: Record<string, string>;
   autoSuspend?: boolean;
+  webhookUrl?: string;
+  webhookSecret?: string;
 }
 
 
@@ -190,6 +192,13 @@ export interface UserDetail {
   plainPorts?: number[];
   connectionProfiles?: ConnectionProfile[];
   usage?: { totalBytes: number; limitBytes: number; remainingBytes: number };
+  traffic?: {
+    today: number;
+    week: number;
+    month: number;
+    last30d: number;
+    daily: { day: string; rxBytes: number; txBytes: number; totalBytes: number }[];
+  };
 }
 
 

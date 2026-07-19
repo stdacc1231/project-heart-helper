@@ -99,7 +99,9 @@ cfg = {
   "api": {"tag": "api", "services": ["StatsService"]},
   "stats": {},
   "policy": {
-    "levels": {"0": {"statsUserUplink": True, "statsUserDownlink": True}},
+    "levels": {"0": {"handshake": 2, "connIdle": 300, "uplinkOnly": 2, "downlinkOnly": 5,
+                       "statsUserUplink": True, "statsUserDownlink": True,
+                       "bufferSize": 4096}},
     "system": {"statsInboundUplink": True, "statsInboundDownlink": True},
   },
   "inbounds": [
@@ -110,27 +112,51 @@ cfg = {
     {
       "tag": "vmess-ws", "listen": "127.0.0.1", "port": 10001, "protocol": "vmess",
       "settings": {"clients": clients("vmess-ws")},
-      "streamSettings": {"network": "ws", "wsSettings": {"path": "/vmess"}},
+      "streamSettings": {"network": "ws", "wsSettings": {"path": "/vmess"},
+        "sockopt": {"tcpFastOpen": True, "tcpNoDelay": True, "tcpKeepAliveInterval": 30}},
     },
     {
       "tag": "vless-ws", "listen": "127.0.0.1", "port": 10002, "protocol": "vless",
       "settings": {"clients": clients("vless-ws"), "decryption": "none"},
-      "streamSettings": {"network": "ws", "wsSettings": {"path": "/vless"}},
+      "streamSettings": {"network": "ws", "wsSettings": {"path": "/vless"},
+        "sockopt": {"tcpFastOpen": True, "tcpNoDelay": True, "tcpKeepAliveInterval": 30}},
     },
     {
       "tag": "trojan-ws", "listen": "127.0.0.1", "port": 10003, "protocol": "trojan",
       "settings": {"clients": clients("trojan-ws")},
-      "streamSettings": {"network": "ws", "wsSettings": {"path": "/trojan"}},
+      "streamSettings": {"network": "ws", "wsSettings": {"path": "/trojan"},
+        "sockopt": {"tcpFastOpen": True, "tcpNoDelay": True, "tcpKeepAliveInterval": 30}},
     },
   ],
   "outbounds": [
-    {"protocol": "freedom", "tag": "direct"},
+    {"protocol": "freedom", "tag": "direct",
+     "streamSettings": {"sockopt": {"tcpFastOpen": True, "tcpNoDelay": True}}},
     {"protocol": "blackhole", "tag": "block"},
   ],
   "routing": {"rules": [{"type": "field", "inboundTag": ["api-in"], "outboundTag": "api"}]},
 }
 cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
 PY
+
+# Kernel tuning: BBR + bigger buffers so xray/ssh saturate the link.
+cat >/etc/sysctl.d/99-autoscript.conf <<'EOF'
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_notsent_lowat = 16384
+net.ipv4.tcp_rmem = 4096 87380 67108864
+net.ipv4.tcp_wmem = 4096 65536 67108864
+net.core.rmem_max = 67108864
+net.core.wmem_max = 67108864
+net.core.netdev_max_backlog = 5000
+net.core.somaxconn = 4096
+net.ipv4.tcp_max_syn_backlog = 8192
+fs.file-max = 1000000
+EOF
+sysctl --system >/dev/null 2>&1 || true
+
 
 # 3) Validate + start.
 if xray_test; then

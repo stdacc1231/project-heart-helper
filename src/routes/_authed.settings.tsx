@@ -209,6 +209,39 @@ function SettingsPage() {
         </details>
       </Card>
 
+      <Card className="space-y-3 p-4">
+        <div>
+          <h3 className="text-sm font-medium">Outbound webhook</h3>
+          <p className="text-xs text-muted-foreground">
+            Every minute we POST a small JSON delta of per-account traffic to this URL. Reduces polling load
+            for external billing / analytics. If a secret is set we sign the body with
+            <code className="mx-1">HMAC-SHA256</code> in <code>X-Autoscript-Signature</code>.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>Webhook URL</Label>
+            <input
+              className="w-full rounded-md border bg-background p-2 font-mono text-xs"
+              placeholder="https://example.com/hooks/autoscript"
+              value={f.webhookUrl ?? ""}
+              onChange={(e) => setF({ ...f, webhookUrl: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Signing secret (optional)</Label>
+            <input
+              className="w-full rounded-md border bg-background p-2 font-mono text-xs"
+              placeholder="leave blank to disable signing"
+              value={f.webhookSecret ?? ""}
+              onChange={(e) => setF({ ...f, webhookSecret: e.target.value })}
+            />
+          </div>
+        </div>
+      </Card>
+
+
+
       <div className="flex gap-2">
         <Button onClick={() => save.mutate()} disabled={save.isPending}>Apply all settings</Button>
       </div>

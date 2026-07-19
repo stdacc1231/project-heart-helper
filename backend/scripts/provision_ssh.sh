@@ -77,5 +77,20 @@ echo "${SYSUSER}:${PASSWORD}" | chpasswd \
 # Reload SSH so the banner change is picked up; never fatal.
 systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
 
+# ---- Per-user byte accounting via iptables owner match --------------------
+# Chain name is AS_<panel-username> (truncated to 20 chars, matching agent).
+UID_NUM="$(id -u "$SYSUSER" 2>/dev/null || echo '')"
+if [ -n "$UID_NUM" ]; then
+  CHAIN="AS_${USERNAME:0:20}"
+  iptables -N "$CHAIN" 2>/dev/null || iptables -F "$CHAIN" 2>/dev/null || true
+  # OWNER match is only available in OUTPUT, so we tag the OUT side (server → client = download for the user).
+  iptables -C OUTPUT -m owner --uid-owner "$UID_NUM" -j "$CHAIN" 2>/dev/null \
+    || iptables -A OUTPUT -m owner --uid-owner "$UID_NUM" -j "$CHAIN" 2>/dev/null || true
+  # For symmetry we also add a rough IN rule matched by conntrack owner (best-effort).
+  iptables -C INPUT -m conntrack --ctstate ESTABLISHED -m owner --uid-owner "$UID_NUM" -j "$CHAIN" 2>/dev/null \
+    || iptables -A INPUT -m conntrack --ctstate ESTABLISHED -m owner --uid-owner "$UID_NUM" -j "$CHAIN" 2>/dev/null || true
+fi
+
 echo "provisioned ssh user $SYSUSER for panel user $USERNAME (expires $EXPIRE_DAY)"
 exit 0
+

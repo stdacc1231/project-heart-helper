@@ -120,7 +120,16 @@ CREATE TABLE IF NOT EXISTS traffic_samples (
     tx_bytes INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_traffic_ts ON traffic_samples(ts);
+CREATE TABLE IF NOT EXISTS account_traffic (
+    account_id TEXT NOT NULL,
+    day TEXT NOT NULL,
+    rx_bytes INTEGER NOT NULL DEFAULT 0,
+    tx_bytes INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (account_id, day)
+);
+CREATE INDEX IF NOT EXISTS idx_account_traffic_day ON account_traffic(day);
 """
+
 
 
 ACCOUNT_COLUMNS = {
@@ -306,6 +315,8 @@ class SettingsIn(BaseModel):
     endpoints: Optional[dict[str, dict[str, Any]]] = None
     sshBanner: Optional[str] = None
     autoSuspend: Optional[bool] = None
+    webhookUrl: Optional[str] = None
+    webhookSecret: Optional[str] = None
 
 
 
@@ -724,6 +735,144 @@ def auto_suspend_tick() -> None:
             print(f"auto-suspend-revoke-failed {a.get('username')}: {exc}", flush=True)
 
 
+def _xray_stats_query(reset: bool = True) -> dict[str, dict[str, int]]:
+    """Return {username: {"up": bytes, "down": bytes}} since last reset."""
+    out: dict[str, dict[str, int]] = {}
+    for candidate in (["xray", "api", "statsquery", "--server=127.0.0.1:10085"],
+                      ["/usr/local/bin/xray", "api", "statsquery", "--server=127.0.0.1:10085"]):
+        if reset:
+            candidate = candidate + ["-reset"]
+        try:
+            res = subprocess.run(candidate + ["-pattern", "user>>>"], capture_output=True, text=True, timeout=5)
+            if res.returncode != 0:
+                continue
+            data = json.loads(res.stdout or "{}")
+            for item in (data.get("stat") or []):
+                name = item.get("name", "")
+                # user>>>{email}>>>traffic>>>uplink | downlink
+                parts = name.split(">>>")
+                if len(parts) < 4 or parts[0] != "user":
+                    continue
+                email = parts[1]
+                kind = parts[3]
+                val = int(item.get("value") or 0)
+                slot = out.setdefault(email, {"up": 0, "down": 0})
+                if kind == "uplink":
+                    slot["up"] += val
+                elif kind == "downlink":
+                    slot["down"] += val
+            return out
+        except Exception:
+            continue
+    return out
+
+
+def _ssh_traffic_read(username: str) -> tuple[int, int]:
+    """Read+zero iptables byte counters for SSH user's owner chain.
+    Returns (rx_from_client, tx_to_client). Chain missing → (0, 0)."""
+    chain = f"AS_{username[:20]}"
+    try:
+        res = subprocess.run(["iptables", "-nvxL", chain, "-Z"], capture_output=True, text=True, timeout=3)
+        if res.returncode != 0:
+            return (0, 0)
+        rx = tx = 0
+        # iptables -Z resets counters as it reads.
+        for line in res.stdout.splitlines():
+            parts = line.split()
+            if len(parts) < 2 or not parts[0].isdigit():
+                continue
+            b = int(parts[1])
+            if "owner" in line and "OUT" in line:
+                tx += b
+            elif "owner" in line and "IN" in line:
+                rx += b
+        return (rx, tx)
+    except Exception:
+        return (0, 0)
+
+
+def _traffic_tick() -> None:
+    """Every 60s: pull xray + ssh per-user counters, roll into daily table,
+    update accounts.used_bytes, and fire outbound webhook if configured."""
+    try:
+        xstats = _xray_stats_query(reset=True)
+    except Exception as exc:
+        print(f"traffic-xray-failed: {exc}", flush=True)
+        xstats = {}
+
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    deltas: list[dict] = []
+    try:
+        with db() as c:
+            rows = c.execute("SELECT id, username, protocol FROM accounts").fetchall()
+            for r in rows:
+                aid = r["id"]; uname = r["username"]; proto = r["protocol"]
+                if proto == "ssh":
+                    rx, tx = _ssh_traffic_read(uname)
+                else:
+                    s = xstats.get(uname) or {}
+                    rx = int(s.get("up") or 0)   # client → server = user upload
+                    tx = int(s.get("down") or 0) # server → client = user download
+                if rx == 0 and tx == 0:
+                    continue
+                c.execute(
+                    "INSERT INTO account_traffic(account_id, day, rx_bytes, tx_bytes) VALUES(?,?,?,?) "
+                    "ON CONFLICT(account_id, day) DO UPDATE SET rx_bytes = rx_bytes + excluded.rx_bytes, "
+                    "tx_bytes = tx_bytes + excluded.tx_bytes",
+                    (aid, day, rx, tx),
+                )
+                c.execute("UPDATE accounts SET used_bytes = COALESCE(used_bytes,0) + ? WHERE id = ?",
+                          (rx + tx, aid))
+                deltas.append({"accountId": aid, "username": uname, "protocol": proto,
+                               "rxBytes": rx, "txBytes": tx})
+    except Exception as exc:
+        print(f"traffic-tick-failed: {exc}", flush=True)
+        return
+
+    if deltas:
+        _fire_traffic_webhook(deltas)
+
+
+def _fire_traffic_webhook(deltas: list[dict]) -> None:
+    url = kv_get("webhook.url", "").strip()
+    if not url:
+        return
+    secret = kv_get("webhook.secret", "").strip()
+    payload = json.dumps({"type": "traffic.delta", "at": datetime.now(timezone.utc).isoformat(),
+                          "items": deltas}).encode()
+    headers = {"Content-Type": "application/json", "User-Agent": "autoscript-webhook/1"}
+    if secret:
+        import hmac as _h, hashlib as _hh
+        sig = _h.new(secret.encode(), payload, _hh.sha256).hexdigest()
+        headers["X-Autoscript-Signature"] = f"sha256={sig}"
+    try:
+        import urllib.request
+        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        urllib.request.urlopen(req, timeout=5).read()
+    except Exception as exc:
+        print(f"webhook-failed: {exc}", flush=True)
+
+
+def _account_traffic_buckets(aid: str) -> dict:
+    """Today / this-week / this-month totals and daily buckets for the last 30 days."""
+    today = datetime.now(timezone.utc).date()
+    with db() as c:
+        rows = c.execute(
+            "SELECT day, rx_bytes, tx_bytes FROM account_traffic WHERE account_id = ? AND day >= ? ORDER BY day",
+            (aid, (today - timedelta(days=30)).isoformat()),
+        ).fetchall()
+    daily = [{"day": r["day"], "rxBytes": int(r["rx_bytes"]), "txBytes": int(r["tx_bytes"]),
+              "totalBytes": int(r["rx_bytes"]) + int(r["tx_bytes"])} for r in rows]
+    by_day = {d["day"]: d for d in daily}
+    monday = today - timedelta(days=today.weekday())
+    first = today.replace(day=1)
+    tot_today = by_day.get(today.isoformat(), {"totalBytes": 0})["totalBytes"]
+    tot_week = sum(d["totalBytes"] for d in daily if d["day"] >= monday.isoformat())
+    tot_month = sum(d["totalBytes"] for d in daily if d["day"] >= first.isoformat())
+    tot_all = sum(d["totalBytes"] for d in daily)
+    return {"today": tot_today, "week": tot_week, "month": tot_month, "last30d": tot_all, "daily": daily}
+
+
 def _scheduler_loop() -> None:
     # First tick after 30s so the panel finishes booting; then every 60s.
     time.sleep(30)
@@ -732,6 +881,10 @@ def _scheduler_loop() -> None:
             auto_suspend_tick()
         except Exception as exc:
             print(f"scheduler-error: {exc}", flush=True)
+        try:
+            _traffic_tick()
+        except Exception as exc:
+            print(f"traffic-tick-error: {exc}", flush=True)
         # Refresh the pre-auth banner every 5 minutes so counters stay current.
         try:
             if int(time.time()) // 60 % 5 == 0:
@@ -739,6 +892,7 @@ def _scheduler_loop() -> None:
         except Exception:
             pass
         time.sleep(60)
+
 
 
 # ---------------------------------------------------------------------------
@@ -1184,6 +1338,15 @@ def public_accounts_detail(aid: str):
     return account_detail_payload(aid)
 
 
+@app.get("/accounts/{aid}/traffic")
+def accounts_traffic(aid: str, _: str = Depends(require_auth)):
+    with db() as c:
+        r = c.execute("SELECT id FROM accounts WHERE id = ?", (aid,)).fetchone()
+    if not r:
+        raise HTTPException(404, "Not found")
+    return _account_traffic_buckets(aid)
+
+
 def account_detail_payload(aid: str):
     with db() as c:
         r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
@@ -1200,13 +1363,16 @@ def account_detail_payload(aid: str):
         days = 0
     limit_bytes = max(0, int(a.get("quotaGb") or 0)) * 1024 ** 3
     used = max(0, int(a.get("usedBytes") or 0))
+    traffic = _account_traffic_buckets(aid)
     return {"account": a, "configLink": cfg["link"], "configText": cfg["text"],
             "subscriptionUrl": _panel_public_url(f"/u/{aid}"),
-            "daysRemaining": days, "hourly": [], "daily": [], "activeIps": ips,
+            "daysRemaining": days, "hourly": [], "daily": traffic["daily"], "activeIps": ips,
             "loginUsername": ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"],
             "host": _proto_host(a["protocol"]), "tlsPorts": _tls_ports(), "plainPorts": _plain_ports(),
             "connectionProfiles": cfg.get("profiles", []),
+            "traffic": traffic,
             "usage": {"totalBytes": used, "limitBytes": limit_bytes, "remainingBytes": max(0, limit_bytes - used) if limit_bytes else 0}}
+
 
 
 def accounts_config_public(a: dict) -> dict:
@@ -1513,6 +1679,8 @@ def settings_get(_: str = Depends(require_auth)):
         "sshBanner": kv_get("ssh.banner", DEFAULT_SSH_BANNER),
         "sshBannerVariables": BANNER_VARIABLES,
         "autoSuspend": kv_get("panel.autoSuspend", "1") == "1",
+        "webhookUrl": kv_get("webhook.url", ""),
+        "webhookSecret": kv_get("webhook.secret", ""),
     }
 
 
@@ -1565,6 +1733,10 @@ def settings_save(inp: SettingsIn, user: str = Depends(require_auth)):
     if inp.autoSuspend is not None:
         kv_set("panel.autoSuspend", "1" if inp.autoSuspend else "0")
         changed["autoSuspend"] = inp.autoSuspend
+    if inp.webhookUrl is not None:
+        kv_set("webhook.url", inp.webhookUrl.strip()); changed["webhookUrl"] = True
+    if inp.webhookSecret is not None:
+        kv_set("webhook.secret", inp.webhookSecret.strip()); changed["webhookSecret"] = True
     apply = Path(INSTALL_ROOT) / "backend" / "scripts" / "apply_settings.sh"
     if apply.exists():
         subprocess.Popen(["bash", str(apply)])
