@@ -159,6 +159,8 @@ export interface LiveConnection {
   connectedAt: string;
   rxBytes: number;
   txBytes: number;
+  upBps?: number;
+  downBps?: number;
 }
 
 export interface UserTraffic { t: string; rxBytes: number; txBytes: number; }
