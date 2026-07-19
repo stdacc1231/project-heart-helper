@@ -946,7 +946,7 @@ def _account_traffic_buckets(aid: str) -> dict:
 
 
 def _scheduler_loop() -> None:
-    time.sleep(30)
+    time.sleep(5)
     tick = 0
     while True:
         tick += 1
