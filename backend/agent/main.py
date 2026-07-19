@@ -1679,6 +1679,8 @@ def settings_get(_: str = Depends(require_auth)):
         "sshBanner": kv_get("ssh.banner", DEFAULT_SSH_BANNER),
         "sshBannerVariables": BANNER_VARIABLES,
         "autoSuspend": kv_get("panel.autoSuspend", "1") == "1",
+        "webhookUrl": kv_get("webhook.url", ""),
+        "webhookSecret": kv_get("webhook.secret", ""),
     }
 
 
