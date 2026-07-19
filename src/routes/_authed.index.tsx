@@ -103,6 +103,9 @@ function DashboardPage() {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} · Xray usage`} value={formatBytes(xrayTotal)} sub="VMess / VLESS / Trojan" />
         <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} · SSH usage`} value={formatBytes(sshTotal)} sub="SSH + SSH-WS" />
+      </div>
+
+
 
 
       <Card className="p-4">
