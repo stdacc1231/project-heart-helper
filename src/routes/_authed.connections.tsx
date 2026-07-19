@@ -51,6 +51,7 @@ function LivePage() {
               <TableHead>IP</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Device</TableHead>
+              <TableHead>Live speed</TableHead>
               <TableHead>Rx / Tx</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
