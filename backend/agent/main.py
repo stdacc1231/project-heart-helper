@@ -980,6 +980,31 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
 def _start_scheduler() -> None:
     import threading
     write_pre_auth_banner()
+    # Rehydrate connected-user state from disk so a panel restart keeps the
+    # Connections view populated (real live-rate values recover on next tick).
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=180)
+        with db() as c:
+            rows = c.execute("SELECT * FROM session_state").fetchall()
+        for r in rows:
+            try:
+                at = datetime.fromisoformat(r["at"])
+            except Exception:
+                continue
+            if at < cutoff:
+                continue
+            uname = r["username"]
+            _LAST_ACTIVITY[uname] = {"rx": int(r["rx_bytes"]), "tx": int(r["tx_bytes"]),
+                                     "at": r["at"], "protocol": r["protocol"], "accountId": r["account_id"]}
+            _LIVE_RATE[uname] = {"upBps": int(r["up_bps"]), "downBps": int(r["down_bps"]),
+                                 "at": r["at"], "protocol": r["protocol"], "accountId": r["account_id"]}
+    except Exception as exc:
+        print(f"session-state-restore-failed: {exc}", flush=True)
+    # Prime xray reset counter so the first tick's delta is small, not a spike.
+    try:
+        _xray_stats_query(reset=True)
+    except Exception:
+        pass
     t = threading.Thread(target=_scheduler_loop, name="autoscript-scheduler", daemon=True)
     t.start()
 
