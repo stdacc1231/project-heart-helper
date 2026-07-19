@@ -1540,12 +1540,15 @@ def connections_list(_: str = Depends(require_auth)):
         for r in rows:
             aid = r["id"]; uname = r["username"]; proto = r["protocol"]
             if proto == "ssh":
+                login_user = ssh_login_username(uname)
+                rate = live_rate_for(login_user)
                 for ip_info in active_ips_for_account({"id": aid, "username": uname, "protocol": "ssh"}):
                     out.append({
                         "id": f"{aid}:{ip_info['ip']}", "accountId": aid, "username": uname,
                         "protocol": "ssh", "ip": ip_info["ip"], "country": "", "city": "",
                         "device": "ssh", "connectedAt": ip_info["lastSeen"],
                         "rxBytes": 0, "txBytes": 0,
+                        "upBps": rate["upBps"], "downBps": rate["downBps"],
                     })
             else:
                 last = _LAST_ACTIVITY.get(uname)
@@ -1557,11 +1560,13 @@ def connections_list(_: str = Depends(require_auth)):
                     continue
                 if at < cutoff:
                     continue
+                rate = live_rate_for(uname)
                 out.append({
                     "id": f"{aid}:live", "accountId": aid, "username": uname,
                     "protocol": proto, "ip": "—", "country": "", "city": "",
                     "device": proto, "connectedAt": last["at"],
                     "rxBytes": int(last.get("rx") or 0), "txBytes": int(last.get("tx") or 0),
+                    "upBps": rate["upBps"], "downBps": rate["downBps"],
                 })
     except Exception as exc:
         print(f"connections-list-failed: {exc}", flush=True)
