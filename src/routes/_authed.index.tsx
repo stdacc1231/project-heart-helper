@@ -171,12 +171,12 @@ function DashboardPage() {
             <AreaChart data={chartData} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
               <defs>
                 <linearGradient id="rx" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%"   stopColor="hsl(var(--primary))" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  <stop offset="0%"   stopColor="var(--primary)" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="tx" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%"   stopColor="hsl(var(--chart-2, 200 90% 55%))" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="hsl(var(--chart-2, 200 90% 55%))" stopOpacity={0} />
+                  <stop offset="0%"   stopColor="var(--chart-2)" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -184,8 +184,8 @@ function DashboardPage() {
               <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} unit=" GB" />
               <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Area type="monotone" dataKey="rx" name="Download" stroke="hsl(var(--primary))" fill="url(#rx)" strokeWidth={2} />
-              <Area type="monotone" dataKey="tx" name="Upload"   stroke="hsl(var(--chart-2, 200 90% 55%))" fill="url(#tx)" strokeWidth={2} />
+              <Area type="monotone" dataKey="rx" name="Download" stroke="var(--primary)" fill="url(#rx)" strokeWidth={2} />
+              <Area type="monotone" dataKey="tx" name="Upload"   stroke="var(--chart-2)" fill="url(#tx)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -202,12 +202,12 @@ function DashboardPage() {
               <AreaChart data={chartData} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                 <defs>
                   <linearGradient id="xr" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%"   stopColor="hsl(var(--primary))" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    <stop offset="0%"   stopColor="var(--primary)" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="sh" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%"   stopColor="hsl(var(--chart-2, 200 90% 55%))" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="hsl(var(--chart-2, 200 90% 55%))" stopOpacity={0} />
+                    <stop offset="0%"   stopColor="var(--chart-2)" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -215,8 +215,8 @@ function DashboardPage() {
                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} unit=" GB" />
                 <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="xray" name="Xray" stackId="1" stroke="hsl(var(--primary))" fill="url(#xr)" strokeWidth={2} />
-                <Area type="monotone" dataKey="ssh"  name="SSH"  stackId="1" stroke="hsl(var(--chart-2, 200 90% 55%))" fill="url(#sh)" strokeWidth={2} />
+                <Area type="monotone" dataKey="xray" name="Xray" stackId="1" stroke="var(--primary)" fill="url(#xr)" strokeWidth={2} />
+                <Area type="monotone" dataKey="ssh"  name="SSH"  stackId="1" stroke="var(--chart-2)" fill="url(#sh)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
