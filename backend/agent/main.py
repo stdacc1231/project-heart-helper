@@ -1395,13 +1395,16 @@ def account_detail_payload(aid: str):
     limit_bytes = max(0, int(a.get("quotaGb") or 0)) * 1024 ** 3
     used = max(0, int(a.get("usedBytes") or 0))
     traffic = _account_traffic_buckets(aid)
+    login_user = ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"]
+    live = live_rate_for(login_user if a["protocol"] == "ssh" else a["username"])
     return {"account": a, "configLink": cfg["link"], "configText": cfg["text"],
             "subscriptionUrl": _panel_public_url(f"/u/{aid}"),
             "daysRemaining": days, "hourly": [], "daily": traffic["daily"], "activeIps": ips,
-            "loginUsername": ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"],
+            "loginUsername": login_user,
             "host": _proto_host(a["protocol"]), "tlsPorts": _tls_ports(), "plainPorts": _plain_ports(),
             "connectionProfiles": cfg.get("profiles", []),
             "traffic": traffic,
+            "liveRate": live,
             "usage": {"totalBytes": used, "limitBytes": limit_bytes, "remainingBytes": max(0, limit_bytes - used) if limit_bytes else 0}}
 
 
