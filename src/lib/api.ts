@@ -192,6 +192,7 @@ export interface UserDetail {
   plainPorts?: number[];
   connectionProfiles?: ConnectionProfile[];
   usage?: { totalBytes: number; limitBytes: number; remainingBytes: number };
+  liveRate?: { upBps: number; downBps: number; at: string | null };
   traffic?: {
     today: number;
     week: number;
