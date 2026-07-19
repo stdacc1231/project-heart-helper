@@ -161,25 +161,6 @@ function AccountDetail() {
           ) : <div className="text-sm text-muted-foreground">No active IPs detected right now.</div>}
         </Card>
 
-        <Card className="p-4 lg:col-span-2">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-medium">Client config</h3>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(detail?.configLink ?? ""); toast.success("Copied"); }}>
-                <Copy className="mr-1 h-4 w-4" /> Copy link
-              </Button>
-              {data.telegramId && (
-                <Button size="sm" onClick={() => sendTg.mutate()} disabled={sendTg.isPending}>
-                  <Send className="mr-1 h-4 w-4" /> Send via Telegram
-                </Button>
-              )}
-            </div>
-          </div>
-          <Input readOnly value={detail?.configLink ?? ""} className="font-mono text-xs" />
-          {detail?.configText && (
-            <Textarea readOnly value={detail.configText} className="mt-3 font-mono text-xs" rows={8} />
-          )}
-        </Card>
 
         <Card className="p-4 lg:col-span-2">
           <div className="mb-3 flex items-center justify-between">
