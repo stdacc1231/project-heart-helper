@@ -156,8 +156,8 @@ function seed(): MockDB {
     domain: "panel.example.com", port: 443, tlsMode: "single",
     dnsProvider: "dns_cf", rootDomain: "example.com",
     dbPath: "/etc/autoscript/db.sqlite", repoUrl: "https://github.com/your-user/autoscript.git",
-    cdn: { enabled: true, provider: "cloudflare", realIpHeader: "CF-Connecting-IP" },
     bbr: true,
+
     tlsPorts:   [443, 2053, 2083, 2087, 2096, 8443],
     plainPorts: [80, 8080, 8880, 2052, 2082, 2086, 2095],
     endpoints: {},
