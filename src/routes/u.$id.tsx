@@ -77,39 +77,55 @@ function UserStatusPage() {
       </Card>
 
 
-      <Card className="mt-4 p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-medium">Connection settings</h2>
-            <p className="text-xs text-muted-foreground">
-              Featured on TLS <span className="font-mono">443</span> and Plain <span className="font-mono">80</span>.
-              Also works on TLS {(data.tlsPorts ?? []).join(", ") || "—"} · Plain {(data.plainPorts ?? []).join(", ") || "—"}.
-            </p>
+      {a.protocol === "ssh" ? (
+        <Card className="mt-4 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-medium">Account summary</h2>
+            <Button variant="outline" size="sm" onClick={() => copy(buildSshSummary(a, data), "Summary")}>
+              <Copy className="mr-1 h-4 w-4" /> Copy
+            </Button>
           </div>
-          <Badge variant="outline">{data.connectionProfiles?.length ?? 0} profiles</Badge>
-        </div>
-        <div className="grid gap-3">
-          {(() => {
-            const list = data.connectionProfiles ?? [];
-            const featured = list.filter((p) => p.port === 443 || p.port === 80);
-            const rest = list.filter((p) => p.port !== 443 && p.port !== 80);
-            return (
-              <>
-                {featured.map((p) => <ProfileCard key={`f-${p.label}-${p.port}`} profile={p} />)}
-                {rest.length > 0 && (
-                  <details className="rounded-md border bg-muted/20 p-3">
-                    <summary className="cursor-pointer text-xs text-muted-foreground">Show {rest.length} more for other Cloudflare ports</summary>
-                    <div className="mt-3 grid gap-3">
-                      {rest.map((p) => <ProfileCard key={`r-${p.label}-${p.port}`} profile={p} />)}
-                    </div>
-                  </details>
-                )}
-                {!list.length && <div className="text-sm text-muted-foreground">No connection profiles available.</div>}
-              </>
-            );
-          })()}
-        </div>
-      </Card>
+          <Textarea
+            readOnly
+            value={buildSshSummary(a, data)}
+            className="min-h-[280px] whitespace-pre font-mono text-xs"
+          />
+        </Card>
+      ) : (
+        <Card className="mt-4 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-medium">Connection settings</h2>
+              <p className="text-xs text-muted-foreground">
+                Featured on TLS <span className="font-mono">443</span> and Plain <span className="font-mono">80</span>.
+                Also works on TLS {(data.tlsPorts ?? []).join(", ") || "—"} · Plain {(data.plainPorts ?? []).join(", ") || "—"}.
+              </p>
+            </div>
+            <Badge variant="outline">{data.connectionProfiles?.length ?? 0} profiles</Badge>
+          </div>
+          <div className="grid gap-3">
+            {(() => {
+              const list = data.connectionProfiles ?? [];
+              const featured = list.filter((p) => p.port === 443 || p.port === 80);
+              const rest = list.filter((p) => p.port !== 443 && p.port !== 80);
+              return (
+                <>
+                  {featured.map((p) => <ProfileCard key={`f-${p.label}-${p.port}`} profile={p} />)}
+                  {rest.length > 0 && (
+                    <details className="rounded-md border bg-muted/20 p-3">
+                      <summary className="cursor-pointer text-xs text-muted-foreground">Show {rest.length} more for other Cloudflare ports</summary>
+                      <div className="mt-3 grid gap-3">
+                        {rest.map((p) => <ProfileCard key={`r-${p.label}-${p.port}`} profile={p} />)}
+                      </div>
+                    </details>
+                  )}
+                  {!list.length && <div className="text-sm text-muted-foreground">No connection profiles available.</div>}
+                </>
+              );
+            })()}
+          </div>
+        </Card>
+      )}
 
       {(data.cdns ?? []).length > 0 && (
         <Card className="mt-4 p-4">
