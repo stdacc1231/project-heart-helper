@@ -142,7 +142,16 @@ CREATE TABLE IF NOT EXISTS session_state (
     down_bps INTEGER NOT NULL DEFAULT 0,
     at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS cdns (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    url          TEXT NOT NULL,
+    protocols    TEXT NOT NULL DEFAULT '',
+    account_ids  TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL
+);
 """
+
 
 
 
