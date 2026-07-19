@@ -20,7 +20,12 @@ function AccountDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { data: detail } = useQuery({ queryKey: ["account-detail", id], queryFn: () => api.accounts.detail(id) });
+  const { data: detail } = useQuery({
+    queryKey: ["account-detail", id],
+    queryFn: () => api.accounts.detail(id),
+    refetchInterval: 10000,
+  });
+
   const data = detail?.account;
   const [f, setF] = useState<Partial<Account>>({});
   useEffect(() => { if (data) setF(data); }, [data]);
