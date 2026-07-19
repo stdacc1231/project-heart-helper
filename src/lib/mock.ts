@@ -239,7 +239,7 @@ export const mock = {
       quotaGb: input.quotaGb ?? 0, usedBytes: 0, online: 0,
       status: trial ? "trial" : "active",
       telegramId: input.telegramId, planId: input.planId, note: input.note,
-      cdn: input.cdn ?? false, subscriptionToken: tok(), trial,
+      subscriptionToken: tok(), trial,
     };
     db.accounts.unshift(a);
     audit(db, "account.create", `Created ${a.protocol} account ${a.username}${trial ? " (trial)" : ""}`, a.username);
