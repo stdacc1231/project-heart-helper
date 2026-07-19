@@ -368,7 +368,17 @@ export const api = {
     async save(c: Partial<Cdn>) { return IS_PREVIEW ? mock.saveCdn(c) : req<Cdn>(c.id ? `/cdns/${c.id}` : "/cdns", { method: c.id ? "PATCH" : "POST", body: JSON.stringify(c) }); },
     async remove(id: string) { return IS_PREVIEW ? mock.removeCdn(id) : req(`/cdns/${id}`, { method: "DELETE" }); },
   },
+  xray: {
+    async status() { return IS_PREVIEW ? { version: "v1.8.24", active: "active", config_path: "/usr/local/etc/xray/config.json" } : req<{ version: string; active: string; config_path: string }>("/xray/status"); },
+    async versions() { return IS_PREVIEW ? { current: "v1.8.24", available: ["v1.8.24","v1.8.23","v1.8.16","v1.8.11"] } : req<{ current: string; available: string[] }>("/xray/versions"); },
+    async install(version: string) { return IS_PREVIEW ? Promise.resolve({ ok: true, version }) : req<{ ok: boolean; version: string }>("/xray/install", { method: "POST", body: JSON.stringify({ version }) }); },
+    async logs(kind: "access" | "error" = "access", lines = 300) { return IS_PREVIEW ? { path: "/var/log/xray/"+kind+".log", content: "(preview) no logs\n" } : req<{ path: string; content: string }>(`/xray/logs?kind=${kind}&lines=${lines}`); },
+    async config() { return IS_PREVIEW ? { path: "/usr/local/etc/xray/config.json", config: { inbounds: [], outbounds: [] } } : req<{ path: string; config: unknown }>("/xray/config"); },
+    async saveConfig(config: unknown) { return IS_PREVIEW ? Promise.resolve({ ok: true }) : req<{ ok: boolean }>("/xray/config", { method: "POST", body: JSON.stringify({ config }) }); },
+    async restart() { return IS_PREVIEW ? Promise.resolve({ ok: true }) : req<{ ok: boolean }>("/xray/restart", { method: "POST" }); },
+  },
 };
+
 
 
 export function formatBytes(n: number) {
