@@ -168,9 +168,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          </div>
-
         </header>
+
         <main className="p-4 lg:p-8">{children}</main>
       </div>
     </div>
