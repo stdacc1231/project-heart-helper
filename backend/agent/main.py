@@ -508,13 +508,18 @@ def _vmess_link(username: str, host: str, port: int, uid: str, *, tls: bool) -> 
 
 
 
+def _xray_path(proto: str, network: str) -> str:
+    if network == "ws":
+        return f"/{proto}"
+    if network == "xhttp":
+        return f"/{proto}-xh"
+    if network == "httpupgrade":
+        return f"/{proto}-hu"
+    return ""  # tcp — no path
+
+
 def _xray_uri(proto: str, username: str, host: str, port: int, uid: str, *, tls: bool, network: str = "ws") -> str:
-    if network == "tcp":
-        path = ""
-    elif network == "ws":
-        path = f"/{proto}"
-    else:  # xhttp
-        path = f"/{proto}-xh"
+    path = _xray_path(proto, network)
     security = "tls" if tls else "none"
     suffix = quote(username, safe="")
     query = f"type={network}&security={security}&host={quote(host)}&sni={quote(host)}"
@@ -526,12 +531,7 @@ def _xray_uri(proto: str, username: str, host: str, port: int, uid: str, *, tls:
 
 
 def _vmess_link_tcp(username: str, host: str, port: int, uid: str, *, tls: bool, network: str) -> str:
-    if network == "tcp":
-        path = ""
-    elif network == "ws":
-        path = "/vmess"
-    else:
-        path = "/vmess-xh"
+    path = _xray_path("vmess", network)
     cfg = {
         "v": "2", "ps": username, "add": host, "port": str(port), "id": uid,
         "aid": "0", "scy": "auto", "net": network, "type": "none",
@@ -575,20 +575,21 @@ def connection_profiles(a: dict) -> list[dict[str, Any]]:
             link = _vmess_link_tcp(a["username"], host, port, uid, tls=tls, network=network)
         else:
             link = _xray_uri(proto, a["username"], host, port, uid, tls=tls, network=network)
-        transport = {"ws": "WS", "xhttp": "xHTTP", "tcp": "TCP"}[network]
+        transport_label = {"ws": "WS", "xhttp": "xHTTP", "httpupgrade": "HTTPUpgrade", "tcp": "TCP"}[network]
         sec = "TLS" if tls else "nTLS"
-        path = "" if network == "tcp" else (f"/{proto}" if network == "ws" else f"/{proto}-xh")
         return {
-            "label": f"{proto.upper()} · {transport} · {sec} :{port}",
+            "label": f"{proto.upper()} · {transport_label} · {sec} :{port}",
             "network": network, "security": "tls" if tls else "none",
-            "host": host, "port": port, "path": path, "link": link, "text": link,
+            "host": host, "port": port, "path": _xray_path(proto, network),
+            "link": link, "text": link,
         }
 
-    # Only 443 (TLS) + 80 (plain). Every xray transport shown for each.
-    for network in ("ws", "xhttp", "tcp"):
+    # 443 (TLS) + 80 (plain), every routable transport per port.
+    for network in ("ws", "xhttp", "httpupgrade"):
         out.append(_mk(443, True, network))
         out.append(_mk(80, False, network))
     return out
+
 
 
 
