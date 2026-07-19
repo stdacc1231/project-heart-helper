@@ -791,6 +791,9 @@ def _ssh_traffic_read(username: str) -> tuple[int, int]:
         return (0, 0)
 
 
+_LAST_ACTIVITY: dict[str, dict] = {}  # username -> {rx, tx, at, protocol, accountId}
+
+
 def _traffic_tick() -> None:
     """Every 60s: pull xray + ssh per-user counters, roll into daily table,
     update accounts.used_bytes, and fire outbound webhook if configured."""
@@ -801,6 +804,7 @@ def _traffic_tick() -> None:
         xstats = {}
 
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    now_iso = datetime.now(timezone.utc).isoformat()
     deltas: list[dict] = []
     try:
         with db() as c:
@@ -815,6 +819,8 @@ def _traffic_tick() -> None:
                     tx = int(s.get("down") or 0) # server → client = user download
                 if rx == 0 and tx == 0:
                     continue
+                _LAST_ACTIVITY[uname] = {"rx": rx, "tx": tx, "at": now_iso,
+                                          "protocol": proto, "accountId": aid}
                 c.execute(
                     "INSERT INTO account_traffic(account_id, day, rx_bytes, tx_bytes) VALUES(?,?,?,?) "
                     "ON CONFLICT(account_id, day) DO UPDATE SET rx_bytes = rx_bytes + excluded.rx_bytes, "
@@ -831,6 +837,7 @@ def _traffic_tick() -> None:
 
     if deltas:
         _fire_traffic_webhook(deltas)
+
 
 
 def _fire_traffic_webhook(deltas: list[dict]) -> None:
