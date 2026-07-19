@@ -85,7 +85,19 @@ function DashboardPage() {
       : new Date(p.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     rx: +(p.rxBytes / 1024 ** 3).toFixed(2),
     tx: +(p.txBytes / 1024 ** 3).toFixed(2),
+    xray: +(((p.xrayRxBytes ?? 0) + (p.xrayTxBytes ?? 0)) / 1024 ** 3).toFixed(2),
+    ssh: +(((p.sshRxBytes ?? 0) + (p.sshTxBytes ?? 0)) / 1024 ** 3).toFixed(2),
   }));
+
+  // Per-protocol usage snapshot for the current account list
+  const perProtocol = (() => {
+    const m = new Map<string, number>();
+    for (const a of accounts ?? []) m.set(a.protocol, (m.get(a.protocol) ?? 0) + a.usedBytes);
+    return Array.from(m.entries())
+      .map(([protocol, bytes]) => ({ protocol: protocol.toUpperCase(), gb: +(bytes / 1024 ** 3).toFixed(3), bytes }))
+      .sort((a, b) => b.bytes - a.bytes);
+  })();
+
 
   return (
     <div className="space-y-4">
