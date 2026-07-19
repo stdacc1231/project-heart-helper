@@ -72,7 +72,7 @@ function AccountDetail() {
         <Metric icon={ShieldCheck} label="Login" value={detail?.loginUsername ?? data.username} sub={data.protocol === "ssh" ? "Linux SSH user" : "Client name"} />
         <Metric icon={HardDrive} label="Used" value={formatBytes(data.usedBytes)} sub={limitBytes ? `${formatBytes(remainingBytes)} left` : "Unlimited quota"} />
         <Metric icon={Users} label="IP limit" value={data.ipLimit ? String(data.ipLimit) : "∞"} sub={`${detail?.activeIps?.length ?? data.online} online now`} />
-        <Metric icon={Wifi} label="Speed" value={`↓ ${speed(data.speedDnKbps)} / ↑ ${speed(data.speedUpKbps)}`} sub="Mbps" />
+        <Metric icon={Wifi} label="Live speed" value={`↓ ${formatBps(detail?.liveRate?.downBps ?? 0)} / ↑ ${formatBps(detail?.liveRate?.upBps ?? 0)}`} sub={`Cap ↓ ${speed(data.speedDnKbps)} / ↑ ${speed(data.speedUpKbps)} Mbps`} />
       </div>
 
       <div className="grid gap-3 md:grid-cols-4">
