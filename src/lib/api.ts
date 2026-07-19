@@ -107,8 +107,8 @@ export interface PanelSettings {
   rootDomain?: string;
   dbPath: string;
   repoUrl: string;
-  cdn?: { enabled: boolean; provider: "cloudflare" | "custom"; realIpHeader: string };
   bbr?: boolean;
+
   // Multi-port TLS/plain listeners (Cloudflare-supported)
   tlsPorts: number[];      // e.g. [443, 2053, 2083, 2087, 2096, 8443]
   plainPorts: number[];    // e.g. [80, 8080, 8880, 2052, 2082, 2086, 2095]
