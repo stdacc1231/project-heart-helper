@@ -203,3 +203,37 @@ function ProfileCard({ profile }: { profile: ConnectionProfile }) {
 function speed(kbps: number) {
   return kbps ? `${(kbps / 1000).toFixed(kbps % 1000 ? 1 : 0)}` : "∞";
 }
+
+function buildSshSummary(a: any, d: any): string {
+  const host = d.host ?? a.host ?? "server";
+  const login = d.loginUsername ?? `grvpn-${a.username}`;
+  const tls = (d.tlsPorts ?? []).join(", ") || "443";
+  const plain = (d.plainPorts ?? []).join(", ") || "80";
+  const quota = a.quotaGb ? `${a.quotaGb} GB` : "Unlimited";
+  const used = formatBytes(a.usedBytes);
+  const ipLim = a.ipLimit ? String(a.ipLimit) : "∞";
+  const online = (d.activeIps?.length ?? a.online) || 0;
+  const exp = new Date(a.expiresAt).toLocaleDateString();
+  const upKbps = a.speedUpKbps || 0, dnKbps = a.speedDnKbps || 0;
+  const speedTxt = (upKbps || dnKbps) ? `↓ ${dnKbps ? (dnKbps/1000).toFixed(1)+" Mbps" : "∞"} / ↑ ${upKbps ? (upKbps/1000).toFixed(1)+" Mbps" : "∞"}` : "Unlimited";
+  const statusUrl = typeof window !== "undefined" ? window.location.href : "";
+  return [
+    "★ SSH PREMIUM ACCOUNT ★",
+    "────────────────────────────────",
+    ` Username     : ${login}`,
+    ` Password     : ${a.password ?? "(set in panel)"}`,
+    ` Host         : ${host}`,
+    ` TLS ports    : ${tls}`,
+    ` Plain ports  : ${plain}`,
+    ` SSH-WS path  : /`,
+    "────────────────────────────────",
+    ` Status       : ${a.status}`,
+    ` Expires      : ${exp}  (${d.daysRemaining} days left)`,
+    ` Quota        : ${used} / ${quota}`,
+    ` IP limit     : ${ipLim}  (${online} online)`,
+    ` Speed limit  : ${speedTxt}`,
+    "────────────────────────────────",
+    ` Status link  : ${statusUrl}`,
+    "★ Powered by GRVPN ★",
+  ].join("\n");
+}
