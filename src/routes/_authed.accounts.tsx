@@ -142,16 +142,27 @@ function AccountsPage() {
                 <TableCell className="mono text-xs">{formatBytes(a.usedBytes)}</TableCell>
                 <TableCell>{a.online > 0 ? <Badge className="bg-primary/20 text-primary hover:bg-primary/30">{a.online}</Badge> : <span className="text-muted-foreground">—</span>}</TableCell>
                 <TableCell className="space-x-1">
-                  <Badge variant="outline" className={
-                    a.status === "active" ? "border-primary/40 text-primary" :
-                    a.status === "trial"  ? "border-accent/40 text-accent" :
-                    a.status === "pending" ? "border-warning/40 text-warning" :
-                    a.status === "locked" ? "border-warning/40 text-warning" :
-                    a.status === "suspended" ? "border-destructive/40 text-destructive" :
-                    "border-destructive/40 text-destructive"
-                  }>{a.status}</Badge>
+                  <Badge
+                    variant="outline"
+                    title={
+                      a.status === "pending"
+                        ? (a.warning
+                            ? `Pending — provisioning warning: ${a.warning}. Account saved but system user/config may need attention.`
+                            : "Pending — awaiting admin approval or provisioning finish.")
+                        : a.status
+                    }
+                    className={
+                      a.status === "active" ? "border-primary/40 text-primary" :
+                      a.status === "trial"  ? "border-accent/40 text-accent" :
+                      a.status === "pending" ? "border-warning/40 text-warning cursor-help" :
+                      a.status === "locked" ? "border-warning/40 text-warning" :
+                      a.status === "suspended" ? "border-destructive/40 text-destructive" :
+                      "border-destructive/40 text-destructive"
+                    }
+                  >{a.status}{a.status === "pending" ? " ⓘ" : ""}</Badge>
 
                 </TableCell>
+
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" title="Copy subscription URL" onClick={() => copySub(a.id)}><Copy className="h-4 w-4" /></Button>
                   <Button variant="ghost" size="icon" title="Send via Telegram" onClick={() => api.accounts.sendTelegram(a.id).then(() => toast.success("Sent"))}><Send className="h-4 w-4" /></Button>
