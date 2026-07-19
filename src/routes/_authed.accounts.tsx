@@ -386,3 +386,103 @@ function TrialDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: 
     </Dialog>
   );
 }
+
+function EditDialog({ id, onOpenChange }: { id: string | null; onOpenChange: (b: boolean) => void }) {
+  const qc = useQueryClient();
+  const { data: detail } = useQuery({
+    queryKey: ["account-detail", id],
+    queryFn: () => api.accounts.detail(id!),
+    enabled: !!id,
+  });
+  const [f, setF] = useState<Partial<Account>>({});
+  const acc = detail?.account;
+  // sync when a new account is loaded
+  useMemo(() => { if (acc) setF(acc); }, [acc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const save = useMutation({
+    mutationFn: () => api.accounts.update(id!, f),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      qc.invalidateQueries({ queryKey: ["account-detail", id] });
+      toast.success("Saved");
+      onOpenChange(false);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open={!!id} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="h-4 w-4 text-primary" /> Edit account {acc ? <Badge variant="outline" className="mono uppercase">{acc.protocol}</Badge> : null}
+          </DialogTitle>
+        </DialogHeader>
+        {!acc ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Username</Label>
+                <Input value={f.username ?? ""} disabled />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Status</Label>
+                <Select value={f.status} onValueChange={(v) => setF({ ...f, status: v as Account["status"] })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(["active", "locked", "trial", "expired"] as Account["status"][]).map((s) =>
+                      <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {acc.protocol === "ssh" && (
+                <div className="col-span-2 space-y-1.5">
+                  <Label>Password</Label>
+                  <Input value={f.password ?? ""} onChange={(e) => setF({ ...f, password: e.target.value })} />
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label>Telegram ID</Label>
+                <Input value={f.telegramId ?? ""} onChange={(e) => setF({ ...f, telegramId: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Expires</Label>
+                <Input type="date" value={f.expiresAt?.slice(0, 10) ?? ""} onChange={(e) => setF({ ...f, expiresAt: new Date(e.target.value).toISOString() })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>IP limit (0 = ∞)</Label>
+                <Input type="number" value={f.ipLimit ?? 0} onChange={(e) => setF({ ...f, ipLimit: +e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Quota GB (0 = ∞)</Label>
+                <Input type="number" value={f.quotaGb ?? 0} onChange={(e) => setF({ ...f, quotaGb: +e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Down (Mbps, 0 = ∞)</Label>
+                <Input type="number" step="0.1" min="0" value={(f.speedDnKbps ?? 0)/1000}
+                  onChange={(e) => setF({ ...f, speedDnKbps: Math.round((+e.target.value) * 1000) })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Up (Mbps, 0 = ∞)</Label>
+                <Input type="number" step="0.1" min="0" value={(f.speedUpKbps ?? 0)/1000}
+                  onChange={(e) => setF({ ...f, speedUpKbps: Math.round((+e.target.value) * 1000) })} />
+              </div>
+            </div>
+            <DialogFooter className="mt-2">
+              <Button variant="outline" asChild>
+                <Link to="/accounts/$id" params={{ id: acc.id }}>Open full page</Link>
+              </Button>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button onClick={() => save.mutate()} disabled={save.isPending}>
+                {save.isPending ? "Saving…" : "Save changes"}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
