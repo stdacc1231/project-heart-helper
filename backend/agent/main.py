@@ -806,11 +806,13 @@ def _ssh_traffic_read(username: str) -> tuple[int, int]:
 
 
 _LAST_ACTIVITY: dict[str, dict] = {}  # username -> {rx, tx, at, protocol, accountId}
+_LIVE_RATE: dict[str, dict] = {}      # username -> {upBps, downBps, at, protocol, accountId}
+_TICK_SECONDS = 5
 
 
-def _traffic_tick() -> None:
-    """Every 60s: pull xray + ssh per-user counters, roll into daily table,
-    update accounts.used_bytes, and fire outbound webhook if configured."""
+def _traffic_tick(interval: float = 5.0) -> None:
+    """Fast tick: pull xray + ssh per-user counters, roll into daily table,
+    update accounts.used_bytes, and refresh per-user live bps rate."""
     try:
         xstats = _xray_stats_query(reset=True)
     except Exception as exc:
@@ -819,18 +821,35 @@ def _traffic_tick() -> None:
 
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     now_iso = datetime.now(timezone.utc).isoformat()
-    deltas: list[dict] = []
+    interval = max(1.0, float(interval))
     try:
         with db() as c:
             rows = c.execute("SELECT id, username, protocol FROM accounts").fetchall()
+            seen: set[str] = set()
             for r in rows:
                 aid = r["id"]; uname = r["username"]; proto = r["protocol"]
+                seen.add(uname)
                 if proto == "ssh":
                     rx, tx = _ssh_traffic_read(uname)
                 else:
                     s = xstats.get(uname) or {}
-                    rx = int(s.get("up") or 0)   # client → server = user upload
-                    tx = int(s.get("down") or 0) # server → client = user download
+                    rx = int(s.get("up") or 0)
+                    tx = int(s.get("down") or 0)
+                up_bps = int(rx * 8 / interval)
+                dn_bps = int(tx * 8 / interval)
+                if up_bps or dn_bps:
+                    _LIVE_RATE[uname] = {"upBps": up_bps, "downBps": dn_bps,
+                                          "at": now_iso, "protocol": proto, "accountId": aid}
+                else:
+                    prev = _LIVE_RATE.get(uname)
+                    if prev:
+                        try:
+                            age = (datetime.now(timezone.utc) - datetime.fromisoformat(prev["at"])).total_seconds()
+                        except Exception:
+                            age = 999
+                        if age > 15:
+                            _LIVE_RATE[uname] = {"upBps": 0, "downBps": 0,
+                                                  "at": now_iso, "protocol": proto, "accountId": aid}
                 if rx == 0 and tx == 0:
                     continue
                 _LAST_ACTIVITY[uname] = {"rx": rx, "tx": tx, "at": now_iso,
@@ -843,15 +862,25 @@ def _traffic_tick() -> None:
                 )
                 c.execute("UPDATE accounts SET used_bytes = COALESCE(used_bytes,0) + ? WHERE id = ?",
                           (rx + tx, aid))
-                deltas.append({"accountId": aid, "username": uname, "protocol": proto,
-                               "rxBytes": rx, "txBytes": tx})
+        for uname in list(_LIVE_RATE.keys()):
+            if uname not in seen:
+                _LIVE_RATE.pop(uname, None)
     except Exception as exc:
         print(f"traffic-tick-failed: {exc}", flush=True)
         return
 
-    # Traffic deltas stay internal — no outbound webhook. External systems can poll /accounts.
 
-
+def live_rate_for(username: str) -> dict:
+    r = _LIVE_RATE.get(username)
+    if not r:
+        return {"upBps": 0, "downBps": 0, "at": None}
+    try:
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(r["at"])).total_seconds()
+    except Exception:
+        age = 999
+    if age > 20:
+        return {"upBps": 0, "downBps": 0, "at": r.get("at")}
+    return {"upBps": int(r.get("upBps") or 0), "downBps": int(r.get("downBps") or 0), "at": r.get("at")}
 
 
 def _account_traffic_buckets(aid: str) -> dict:
@@ -875,24 +904,25 @@ def _account_traffic_buckets(aid: str) -> dict:
 
 
 def _scheduler_loop() -> None:
-    # First tick after 30s so the panel finishes booting; then every 60s.
     time.sleep(30)
+    tick = 0
     while True:
+        tick += 1
         try:
-            auto_suspend_tick()
-        except Exception as exc:
-            print(f"scheduler-error: {exc}", flush=True)
-        try:
-            _traffic_tick()
+            _traffic_tick(_TICK_SECONDS)
         except Exception as exc:
             print(f"traffic-tick-error: {exc}", flush=True)
-        # Refresh the pre-auth banner every 5 minutes so counters stay current.
-        try:
-            if int(time.time()) // 60 % 5 == 0:
+        if tick % max(1, int(60 / _TICK_SECONDS)) == 0:
+            try:
+                auto_suspend_tick()
+            except Exception as exc:
+                print(f"scheduler-error: {exc}", flush=True)
+        if tick % max(1, int(300 / _TICK_SECONDS)) == 0:
+            try:
                 write_pre_auth_banner()
-        except Exception:
-            pass
-        time.sleep(60)
+            except Exception:
+                pass
+        time.sleep(_TICK_SECONDS)
 
 
 
@@ -1365,13 +1395,16 @@ def account_detail_payload(aid: str):
     limit_bytes = max(0, int(a.get("quotaGb") or 0)) * 1024 ** 3
     used = max(0, int(a.get("usedBytes") or 0))
     traffic = _account_traffic_buckets(aid)
+    login_user = ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"]
+    live = live_rate_for(login_user if a["protocol"] == "ssh" else a["username"])
     return {"account": a, "configLink": cfg["link"], "configText": cfg["text"],
             "subscriptionUrl": _panel_public_url(f"/u/{aid}"),
             "daysRemaining": days, "hourly": [], "daily": traffic["daily"], "activeIps": ips,
-            "loginUsername": ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"],
+            "loginUsername": login_user,
             "host": _proto_host(a["protocol"]), "tlsPorts": _tls_ports(), "plainPorts": _plain_ports(),
             "connectionProfiles": cfg.get("profiles", []),
             "traffic": traffic,
+            "liveRate": live,
             "usage": {"totalBytes": used, "limitBytes": limit_bytes, "remainingBytes": max(0, limit_bytes - used) if limit_bytes else 0}}
 
 
@@ -1507,12 +1540,15 @@ def connections_list(_: str = Depends(require_auth)):
         for r in rows:
             aid = r["id"]; uname = r["username"]; proto = r["protocol"]
             if proto == "ssh":
+                login_user = ssh_login_username(uname)
+                rate = live_rate_for(login_user)
                 for ip_info in active_ips_for_account({"id": aid, "username": uname, "protocol": "ssh"}):
                     out.append({
                         "id": f"{aid}:{ip_info['ip']}", "accountId": aid, "username": uname,
                         "protocol": "ssh", "ip": ip_info["ip"], "country": "", "city": "",
                         "device": "ssh", "connectedAt": ip_info["lastSeen"],
                         "rxBytes": 0, "txBytes": 0,
+                        "upBps": rate["upBps"], "downBps": rate["downBps"],
                     })
             else:
                 last = _LAST_ACTIVITY.get(uname)
@@ -1524,11 +1560,13 @@ def connections_list(_: str = Depends(require_auth)):
                     continue
                 if at < cutoff:
                     continue
+                rate = live_rate_for(uname)
                 out.append({
                     "id": f"{aid}:live", "accountId": aid, "username": uname,
                     "protocol": proto, "ip": "—", "country": "", "city": "",
                     "device": proto, "connectedAt": last["at"],
                     "rxBytes": int(last.get("rx") or 0), "txBytes": int(last.get("tx") or 0),
+                    "upBps": rate["upBps"], "downBps": rate["downBps"],
                 })
     except Exception as exc:
         print(f"connections-list-failed: {exc}", flush=True)

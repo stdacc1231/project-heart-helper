@@ -159,6 +159,8 @@ export interface LiveConnection {
   connectedAt: string;
   rxBytes: number;
   txBytes: number;
+  upBps?: number;
+  downBps?: number;
 }
 
 export interface UserTraffic { t: string; rxBytes: number; txBytes: number; }
@@ -190,6 +192,7 @@ export interface UserDetail {
   plainPorts?: number[];
   connectionProfiles?: ConnectionProfile[];
   usage?: { totalBytes: number; limitBytes: number; remainingBytes: number };
+  liveRate?: { upBps: number; downBps: number; at: string | null };
   traffic?: {
     today: number;
     week: number;

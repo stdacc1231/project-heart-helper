@@ -51,6 +51,7 @@ function LivePage() {
               <TableHead>IP</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Device</TableHead>
+              <TableHead>Live speed</TableHead>
               <TableHead>Rx / Tx</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
@@ -63,6 +64,7 @@ function LivePage() {
                 <TableCell className="mono text-xs">{r.ip}</TableCell>
                 <TableCell className="text-xs">{r.country}{r.city ? ` · ${r.city}` : ""}</TableCell>
                 <TableCell className="text-xs">{r.device}</TableCell>
+                <TableCell className="mono text-xs">↓ {fmtBps(r.downBps ?? 0)} · ↑ {fmtBps(r.upBps ?? 0)}</TableCell>
                 <TableCell className="mono text-xs">↓ {formatBytes(r.rxBytes)} · ↑ {formatBytes(r.txBytes)}</TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => kick.mutate(r.id)}>
@@ -72,7 +74,7 @@ function LivePage() {
               </TableRow>
             ))}
             {rows.length === 0 && (
-              <TableRow><TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">No active sessions.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="py-12 text-center text-sm text-muted-foreground">No active sessions.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
@@ -89,4 +91,12 @@ function StatCard({ label, value, accent }: { label: string; value: string; acce
       <div className="mt-2 font-display text-3xl font-semibold tabular-nums">{value}</div>
     </Card>
   );
+}
+
+function fmtBps(bps: number) {
+  if (!bps || bps < 1) return "0 bps";
+  const units = ["bps", "Kbps", "Mbps", "Gbps"];
+  let i = 0; let v = bps;
+  while (v >= 1000 && i < units.length - 1) { v /= 1000; i++; }
+  return `${v.toFixed(v < 10 && i > 0 ? 2 : v < 100 && i > 0 ? 1 : 0)} ${units[i]}`;
 }
