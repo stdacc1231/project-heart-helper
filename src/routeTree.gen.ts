@@ -25,7 +25,7 @@ import { Route as AuthedBotRouteImport } from './routes/_authed.bot'
 import { Route as AuthedBackupsRouteImport } from './routes/_authed.backups'
 import { Route as AuthedAlertsRouteImport } from './routes/_authed.alerts'
 import { Route as AuthedAccountsRouteImport } from './routes/_authed.accounts'
-import { Route as AuthedAccountsIdRouteImport } from './routes/_authed.accounts.$id'
+import { Route as AuthedAccountsIdRouteImport } from './routes/_authed.accounts_.$id'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -107,15 +107,15 @@ const AuthedAccountsRoute = AuthedAccountsRouteImport.update({
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedAccountsIdRoute = AuthedAccountsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => AuthedAccountsRoute,
+  id: '/accounts_/$id',
+  path: '/accounts/$id',
+  getParentRoute: () => AuthedRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/login': typeof LoginRoute
-  '/accounts': typeof AuthedAccountsRouteWithChildren
+  '/accounts': typeof AuthedAccountsRoute
   '/alerts': typeof AuthedAlertsRoute
   '/backups': typeof AuthedBackupsRoute
   '/bot': typeof AuthedBotRoute
@@ -132,7 +132,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
-  '/accounts': typeof AuthedAccountsRouteWithChildren
+  '/accounts': typeof AuthedAccountsRoute
   '/alerts': typeof AuthedAlertsRoute
   '/backups': typeof AuthedBackupsRoute
   '/bot': typeof AuthedBotRoute
@@ -152,7 +152,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
-  '/_authed/accounts': typeof AuthedAccountsRouteWithChildren
+  '/_authed/accounts': typeof AuthedAccountsRoute
   '/_authed/alerts': typeof AuthedAlertsRoute
   '/_authed/backups': typeof AuthedBackupsRoute
   '/_authed/bot': typeof AuthedBotRoute
@@ -166,7 +166,7 @@ export interface FileRoutesById {
   '/_authed/wallet': typeof AuthedWalletRoute
   '/u/$id': typeof UIdRoute
   '/_authed/': typeof AuthedIndexRoute
-  '/_authed/accounts/$id': typeof AuthedAccountsIdRoute
+  '/_authed/accounts_/$id': typeof AuthedAccountsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -223,7 +223,7 @@ export interface FileRouteTypes {
     | '/_authed/wallet'
     | '/u/$id'
     | '/_authed/'
-    | '/_authed/accounts/$id'
+    | '/_authed/accounts_/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -346,30 +346,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAccountsRouteImport
       parentRoute: typeof AuthedRoute
     }
-    '/_authed/accounts/$id': {
-      id: '/_authed/accounts/$id'
-      path: '/$id'
+    '/_authed/accounts_/$id': {
+      id: '/_authed/accounts_/$id'
+      path: '/accounts/$id'
       fullPath: '/accounts/$id'
       preLoaderRoute: typeof AuthedAccountsIdRouteImport
-      parentRoute: typeof AuthedAccountsRoute
+      parentRoute: typeof AuthedRoute
     }
   }
 }
 
-interface AuthedAccountsRouteChildren {
-  AuthedAccountsIdRoute: typeof AuthedAccountsIdRoute
-}
-
-const AuthedAccountsRouteChildren: AuthedAccountsRouteChildren = {
-  AuthedAccountsIdRoute: AuthedAccountsIdRoute,
-}
-
-const AuthedAccountsRouteWithChildren = AuthedAccountsRoute._addFileChildren(
-  AuthedAccountsRouteChildren,
-)
-
 interface AuthedRouteChildren {
-  AuthedAccountsRoute: typeof AuthedAccountsRouteWithChildren
+  AuthedAccountsRoute: typeof AuthedAccountsRoute
   AuthedAlertsRoute: typeof AuthedAlertsRoute
   AuthedBackupsRoute: typeof AuthedBackupsRoute
   AuthedBotRoute: typeof AuthedBotRoute
@@ -382,10 +370,11 @@ interface AuthedRouteChildren {
   AuthedUpdateRoute: typeof AuthedUpdateRoute
   AuthedWalletRoute: typeof AuthedWalletRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
+  AuthedAccountsIdRoute: typeof AuthedAccountsIdRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
-  AuthedAccountsRoute: AuthedAccountsRouteWithChildren,
+  AuthedAccountsRoute: AuthedAccountsRoute,
   AuthedAlertsRoute: AuthedAlertsRoute,
   AuthedBackupsRoute: AuthedBackupsRoute,
   AuthedBotRoute: AuthedBotRoute,
@@ -398,6 +387,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedUpdateRoute: AuthedUpdateRoute,
   AuthedWalletRoute: AuthedWalletRoute,
   AuthedIndexRoute: AuthedIndexRoute,
+  AuthedAccountsIdRoute: AuthedAccountsIdRoute,
 }
 
 const AuthedRouteWithChildren =

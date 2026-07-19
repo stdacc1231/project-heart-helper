@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api, formatBytes, PROTOCOL_LABELS, type Account, type ConnectionProfile } from "@/lib/api";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authed/accounts/$id")({
+export const Route = createFileRoute("/_authed/accounts_/$id")({
   head: () => ({ meta: [{ title: "Account — Autoscript Panel" }] }),
   component: AccountDetail,
 });
