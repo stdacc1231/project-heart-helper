@@ -30,8 +30,8 @@ export interface Account {
   telegramId?: string;
   planId?: string;
   note?: string;
-  cdn?: boolean;             // route through Cloudflare
   subscriptionToken?: string;
+
   trial?: boolean;
 }
 
