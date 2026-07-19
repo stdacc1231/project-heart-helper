@@ -23,7 +23,7 @@ function AccountDetail() {
   const { data: detail } = useQuery({
     queryKey: ["account-detail", id],
     queryFn: () => api.accounts.detail(id),
-    refetchInterval: 10000,
+    refetchInterval: 4000,
   });
 
   const data = detail?.account;
