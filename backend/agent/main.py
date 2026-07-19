@@ -1156,18 +1156,24 @@ def system_traffic(range: str = "24h", _: str = Depends(require_auth)):
     since = datetime.now(timezone.utc) - timedelta(minutes=since_min)
     with db() as c:
         rows = c.execute(
-            "SELECT ts, rx_bytes, tx_bytes FROM traffic_samples WHERE ts >= ? ORDER BY ts",
+            "SELECT ts, rx_bytes, tx_bytes, xray_rx, xray_tx, ssh_rx, ssh_tx "
+            "FROM traffic_samples WHERE ts >= ? ORDER BY ts",
             (since.isoformat(),)
         ).fetchall()
-    # bucket
+    # bucket: [rx, tx, xray_rx, xray_tx, ssh_rx, ssh_tx]
     buckets: dict[int, list[int]] = {}
     for r in rows:
         t = datetime.fromisoformat(r["ts"]).timestamp()
         key = int(t // bucket_sec) * bucket_sec
-        b = buckets.setdefault(key, [0, 0])
+        b = buckets.setdefault(key, [0, 0, 0, 0, 0, 0])
         b[0] += r["rx_bytes"]; b[1] += r["tx_bytes"]
+        b[2] += r["xray_rx"] or 0; b[3] += r["xray_tx"] or 0
+        b[4] += r["ssh_rx"] or 0;  b[5] += r["ssh_tx"] or 0
     return [
-        {"t": datetime.fromtimestamp(k, timezone.utc).isoformat(), "rxBytes": v[0], "txBytes": v[1]}
+        {"t": datetime.fromtimestamp(k, timezone.utc).isoformat(),
+         "rxBytes": v[0], "txBytes": v[1],
+         "xrayRxBytes": v[2], "xrayTxBytes": v[3],
+         "sshRxBytes": v[4], "sshTxBytes": v[5]}
         for k, v in sorted(buckets.items())
     ]
 
