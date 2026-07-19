@@ -17,7 +17,12 @@ export const Route = createFileRoute("/u/$id")({
 
 function UserStatusPage() {
   const { id } = Route.useParams();
-  const { data, isLoading, error } = useQuery({ queryKey: ["public-user", id], queryFn: () => api.accounts.publicDetail(id) });
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["public-user", id],
+    queryFn: () => api.accounts.publicDetail(id),
+    refetchInterval: 15000,
+  });
+
 
   if (isLoading) return <Shell><div className="text-sm text-muted-foreground">Loading account…</div></Shell>;
   if (error || !data) return <Shell><div className="text-sm text-destructive">Account not found.</div></Shell>;
