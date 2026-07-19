@@ -43,6 +43,8 @@ function DashboardPage() {
   const { data: s } = useQuery({ queryKey: ["status"], queryFn: () => api.system.status(), refetchInterval: 3000 });
   const { data: accounts } = useQuery({ queryKey: ["accounts"], queryFn: () => api.accounts.list(), refetchInterval: 5000 });
   const { data: traffic } = useQuery({ queryKey: ["traffic", range], queryFn: () => api.system.traffic(range), refetchInterval: 10000 });
+  // Year of daily buckets for the summary strip (today/yesterday/week/month/year + delta).
+  const { data: yearly } = useQuery({ queryKey: ["traffic", "365d"], queryFn: () => api.system.traffic("365d"), refetchInterval: 60000 });
   const { data: live } = useQuery({ queryKey: ["connections"], queryFn: () => api.connections.list(), refetchInterval: 4000 });
 
 
@@ -53,6 +55,29 @@ function DashboardPage() {
   const periodTx = (traffic ?? []).reduce((sum, p) => sum + p.txBytes, 0);
   const xrayTotal = (traffic ?? []).reduce((s, p) => s + (p.xrayRxBytes ?? 0) + (p.xrayTxBytes ?? 0), 0);
   const sshTotal  = (traffic ?? []).reduce((s, p) => s + (p.sshRxBytes ?? 0) + (p.sshTxBytes ?? 0), 0);
+
+  // --- Summary strip: today / yesterday / week / month / year + delta ---
+  const now = Date.now();
+  const DAY = 86400_000;
+  const bucketsIn = (from: number, to: number) =>
+    (yearly ?? []).filter((p) => {
+      const t = new Date(p.t).getTime();
+      return t >= from && t < to;
+    }).reduce((s, p) => s + p.rxBytes + p.txBytes, 0);
+
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+  const todayFrom = startOfToday.getTime();
+  const yStart = todayFrom - DAY;
+  const todayTotal = bucketsIn(todayFrom, now);
+  const yesterdayTotal = bucketsIn(yStart, todayFrom);
+  const weekTotal = bucketsIn(now - 7 * DAY, now);
+  const monthTotal = bucketsIn(now - 30 * DAY, now);
+  const yearTotal = bucketsIn(now - 365 * DAY, now);
+  const dayDelta = todayTotal - yesterdayTotal;
+  const dayDeltaPct = yesterdayTotal > 0 ? (dayDelta / yesterdayTotal) * 100 : 0;
+  const deltaLabel = yesterdayTotal === 0
+    ? (todayTotal > 0 ? "▲ new" : "= 0")
+    : `${dayDelta >= 0 ? "▲" : "▼"} ${formatBytes(Math.abs(dayDelta))} (${dayDeltaPct >= 0 ? "+" : ""}${dayDeltaPct.toFixed(0)}%)`;
 
   const chartData = (traffic ?? []).map((p) => ({
     time: range !== "24h"
@@ -93,6 +118,14 @@ function DashboardPage() {
         ) : <div className="text-sm text-muted-foreground">No users are online right now.</div>}
       </Card>
 
+      {/* Usage summary strip — today vs yesterday, plus week/month/year rollups */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <Stat icon={HardDrive} label="Today" value={formatBytes(todayTotal)} sub={`vs yday · ${deltaLabel}`} />
+        <Stat icon={HardDrive} label="Yesterday" value={formatBytes(yesterdayTotal)} sub="00:00 – 24:00" />
+        <Stat icon={HardDrive} label="Last 7 days" value={formatBytes(weekTotal)} sub="Rolling week" />
+        <Stat icon={HardDrive} label="Last 30 days" value={formatBytes(monthTotal)} sub="Rolling month" />
+        <Stat icon={HardDrive} label="Last 365 days" value={formatBytes(yearTotal)} sub="Rolling year" />
+      </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} download`} value={formatBytes(periodRx)} sub="Selected period" />
@@ -104,6 +137,7 @@ function DashboardPage() {
         <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} · Xray usage`} value={formatBytes(xrayTotal)} sub="VMess / VLESS / Trojan" />
         <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} · SSH usage`} value={formatBytes(sshTotal)} sub="SSH + SSH-WS" />
       </div>
+
 
 
 
