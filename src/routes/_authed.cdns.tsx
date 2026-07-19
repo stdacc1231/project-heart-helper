@@ -129,8 +129,14 @@ function CdnsPage() {
                     <span className="font-mono text-xs text-muted-foreground break-all">{c.url}</span>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                    <Badge variant="outline" className="uppercase">Xray</Badge>
-                    <Badge variant="secondary">{c.accountIds.length ? `${c.accountIds.length} account${c.accountIds.length > 1 ? "s" : ""}` : "All Xray accounts"}</Badge>
+                    {(c.protocols?.length ? c.protocols : ["xray"]).map((p) => (
+                      <Badge key={p} variant="outline" className="uppercase">{p}</Badge>
+                    ))}
+                    <Badge variant="secondary">
+                      {c.accountIds.length
+                        ? `${c.accountIds.length} account${c.accountIds.length > 1 ? "s" : ""}`
+                        : `All ${(c.protocols?.length ? c.protocols : ["xray"]).map((p) => p.toUpperCase()).join(" + ")} accounts`}
+                    </Badge>
                   </div>
                 </div>
                 <div className="flex gap-2">
