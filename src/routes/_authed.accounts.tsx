@@ -478,7 +478,12 @@ function EditDialog({ id, onOpenChange }: { id: string | null; onOpenChange: (b:
               </div>
               <div className="space-y-1.5">
                 <Label>Expires</Label>
-                <Input type="date" value={f.expiresAt?.slice(0, 10) ?? ""} onChange={(e) => setF({ ...f, expiresAt: new Date(e.target.value).toISOString() })} />
+                <div className="flex items-center gap-1">
+                  <Input type="date" value={f.expiresAt?.slice(0, 10) ?? ""} onChange={(e) => setF({ ...f, expiresAt: new Date(e.target.value).toISOString() })} />
+                  <Button type="button" size="sm" variant="outline" onClick={() => setF({ ...f, expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString() })}>7d</Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setF({ ...f, expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString() })}>30d</Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setF({ ...f, expiresAt: new Date(Date.now() + 365 * 86400_000).toISOString() })}>1y</Button>
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>IP limit (0 = ∞)</Label>
