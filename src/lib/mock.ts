@@ -168,9 +168,10 @@ function seed(): MockDB {
   return {
     loggedIn: false, accounts, logs, plans, payments, bot, settings,
     startedAt: now - 3 * day, connections, backups, alerts,
-    wallet, walletBalanceCents: 1200, invoices,
+    wallet, walletBalanceCents: 1200, invoices, cdns: [],
   };
 }
+
 
 
 const wait = (ms = 120) => new Promise((r) => setTimeout(r, ms));
