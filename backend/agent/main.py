@@ -1504,13 +1504,58 @@ def payments_decide(pid: str, inp: DecisionIn, user: str = Depends(require_auth)
 # ---- Non-critical panel modules --------------------------------------------
 @app.get("/connections")
 def connections_list(_: str = Depends(require_auth)):
-    return []
+    """Return live sessions. SSH: from `ss` per user. Xray: users with recent traffic delta."""
+    out: list[dict] = []
+    try:
+        with db() as c:
+            rows = c.execute("SELECT id, username, protocol FROM accounts").fetchall()
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=180)
+        for r in rows:
+            aid = r["id"]; uname = r["username"]; proto = r["protocol"]
+            if proto == "ssh":
+                for ip_info in active_ips_for_account({"id": aid, "username": uname, "protocol": "ssh"}):
+                    out.append({
+                        "id": f"{aid}:{ip_info['ip']}", "accountId": aid, "username": uname,
+                        "protocol": "ssh", "ip": ip_info["ip"], "country": "", "city": "",
+                        "device": "ssh", "connectedAt": ip_info["lastSeen"],
+                        "rxBytes": 0, "txBytes": 0,
+                    })
+            else:
+                last = _LAST_ACTIVITY.get(uname)
+                if not last:
+                    continue
+                try:
+                    at = datetime.fromisoformat(last["at"])
+                except Exception:
+                    continue
+                if at < cutoff:
+                    continue
+                out.append({
+                    "id": f"{aid}:live", "accountId": aid, "username": uname,
+                    "protocol": proto, "ip": "—", "country": "", "city": "",
+                    "device": proto, "connectedAt": last["at"],
+                    "rxBytes": int(last.get("rx") or 0), "txBytes": int(last.get("tx") or 0),
+                })
+    except Exception as exc:
+        print(f"connections-list-failed: {exc}", flush=True)
+    return out
 
 
 @app.post("/connections/{cid}/kick")
 def connections_kick(cid: str, user: str = Depends(require_auth)):
     log("audit", "connection.kick", f"Kick requested for {cid}", actor=user)
+    # For SSH we can drop the actual TCP flows by killing the user's sshd session.
+    try:
+        aid = cid.split(":")[0]
+        with db() as c:
+            r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
+        if r and r["protocol"] == "ssh":
+            sysuser = ssh_login_username(r["username"])
+            subprocess.run(["pkill", "-KILL", "-u", sysuser], check=False)
+    except Exception as exc:
+        print(f"connections-kick-failed: {exc}", flush=True)
     return {"ok": True}
+
 
 
 @app.get("/backups")
