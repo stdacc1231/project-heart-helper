@@ -849,29 +849,9 @@ def _traffic_tick() -> None:
         print(f"traffic-tick-failed: {exc}", flush=True)
         return
 
-    if deltas:
-        _fire_traffic_webhook(deltas)
+    # Traffic deltas stay internal — no outbound webhook. External systems can poll /accounts.
 
 
-
-def _fire_traffic_webhook(deltas: list[dict]) -> None:
-    url = kv_get("webhook.url", "").strip()
-    if not url:
-        return
-    secret = kv_get("webhook.secret", "").strip()
-    payload = json.dumps({"type": "traffic.delta", "at": datetime.now(timezone.utc).isoformat(),
-                          "items": deltas}).encode()
-    headers = {"Content-Type": "application/json", "User-Agent": "autoscript-webhook/1"}
-    if secret:
-        import hmac as _h, hashlib as _hh
-        sig = _h.new(secret.encode(), payload, _hh.sha256).hexdigest()
-        headers["X-Autoscript-Signature"] = f"sha256={sig}"
-    try:
-        import urllib.request
-        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-        urllib.request.urlopen(req, timeout=5).read()
-    except Exception as exc:
-        print(f"webhook-failed: {exc}", flush=True)
 
 
 def _account_traffic_buckets(aid: str) -> dict:
