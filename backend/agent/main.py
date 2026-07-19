@@ -117,7 +117,11 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS traffic_samples (
     ts TEXT NOT NULL,
     rx_bytes INTEGER NOT NULL,
-    tx_bytes INTEGER NOT NULL
+    tx_bytes INTEGER NOT NULL,
+    xray_rx INTEGER NOT NULL DEFAULT 0,
+    xray_tx INTEGER NOT NULL DEFAULT 0,
+    ssh_rx INTEGER NOT NULL DEFAULT 0,
+    ssh_tx INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_traffic_ts ON traffic_samples(ts);
 CREATE TABLE IF NOT EXISTS account_traffic (
@@ -128,7 +132,20 @@ CREATE TABLE IF NOT EXISTS account_traffic (
     PRIMARY KEY (account_id, day)
 );
 CREATE INDEX IF NOT EXISTS idx_account_traffic_day ON account_traffic(day);
-"""
+CREATE TABLE IF NOT EXISTS session_state (
+    username TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    protocol TEXT NOT NULL,
+    rx_bytes INTEGER NOT NULL DEFAULT 0,
+    tx_bytes INTEGER NOT NULL DEFAULT 0,
+    up_bps INTEGER NOT NULL DEFAULT 0,
+    down_bps INTEGER NOT NULL DEFAULT 0,
+    at TEXT NOT NULL
+);
+""" + "\n-- migrations\n" + " ".join(
+    f"ALTER TABLE traffic_samples ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0;"
+    for col in ("xray_rx", "xray_tx", "ssh_rx", "ssh_tx")
+).replace("ALTER", "-- ALTER") # migrations handled at runtime below
 
 
 
