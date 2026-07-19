@@ -182,6 +182,21 @@ function AccountDetail() {
         </Card>
 
         <Card className="p-4 lg:col-span-2">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-medium">Account summary</h3>
+            <Button variant="outline" size="sm" onClick={() => {
+              const el = document.getElementById("account-summary-pre");
+              if (el) { navigator.clipboard.writeText(el.innerText); toast.success("Summary copied"); }
+            }}>
+              <Copy className="mr-1 h-4 w-4" /> Copy
+            </Button>
+          </div>
+          <pre id="account-summary-pre" className="whitespace-pre overflow-x-auto rounded-md border bg-background/60 p-4 font-mono text-[12px] leading-relaxed">
+{buildSummary(data, detail, limitBytes, remainingBytes, profiles)}
+          </pre>
+        </Card>
+
+        <Card className="p-4 lg:col-span-2">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="text-sm font-medium">Connection settings</h3>
@@ -221,6 +236,7 @@ function AccountDetail() {
             );
           })()}
         </Card>
+
 
 
       </div>
@@ -277,3 +293,70 @@ function Field({ label, value, mono }: { label: string; value: string; mono?: bo
 function speed(kbps: number) {
   return kbps ? `${(kbps / 1000).toFixed(kbps % 1000 ? 1 : 0)}` : "∞";
 }
+
+function buildSummary(
+  a: Account,
+  detail: any,
+  limitBytes: number,
+  remainingBytes: number,
+  profiles: ConnectionProfile[],
+): string {
+  const line = "─".repeat(38);
+  const pad = (k: string, v: string) => `│ ${k.padEnd(12)}: ${v}`;
+  const host = detail?.host ?? "—";
+  const login = detail?.loginUsername ?? a.username;
+  const expires = new Date(a.expiresAt).toLocaleDateString();
+  const daysLeft = Math.max(0, Math.ceil((new Date(a.expiresAt).getTime() - Date.now()) / 86400_000));
+  const quota = limitBytes ? formatBytes(limitBytes) : "Unlimited";
+  const used = formatBytes(a.usedBytes);
+  const remaining = limitBytes ? formatBytes(remainingBytes) : "Unlimited";
+  const dn = a.speedDnKbps ? `${(a.speedDnKbps / 1000).toFixed(a.speedDnKbps % 1000 ? 1 : 0)} Mbps` : "Unlimited";
+  const up = a.speedUpKbps ? `${(a.speedUpKbps / 1000).toFixed(a.speedUpKbps % 1000 ? 1 : 0)} Mbps` : "Unlimited";
+  const tlsPorts = Array.from(new Set(profiles.filter((p) => p.security === "tls").map((p) => p.port))).join(", ") || "—";
+  const plainPorts = Array.from(new Set(profiles.filter((p) => p.security !== "tls").map((p) => p.port))).join(", ") || "—";
+
+  const info = [
+    `★ ${PROTOCOL_LABELS[a.protocol]} PREMIUM ACCOUNT ★`,
+    "",
+    "▸ Account Info",
+    `┌${line}`,
+    pad("Username", login),
+    a.password ? pad("Password", a.password) : "",
+    a.uuid ? pad("UUID", a.uuid) : "",
+    `└${line}`,
+    "",
+    "▸ Server",
+    `┌${line}`,
+    pad("Host", host),
+    pad("Protocol", PROTOCOL_LABELS[a.protocol]),
+    pad("TLS ports", tlsPorts),
+    pad("Plain ports", plainPorts),
+    `└${line}`,
+    "",
+    "▸ Limits",
+    `┌${line}`,
+    pad("IP limit", a.ipLimit ? String(a.ipLimit) : "Unlimited"),
+    pad("Quota", quota),
+    pad("Used", used),
+    pad("Remaining", remaining),
+    pad("Down speed", dn),
+    pad("Up speed", up),
+    pad("Online now", String(a.online ?? 0)),
+    `└${line}`,
+    "",
+    "▸ Validity",
+    `┌${line}`,
+    pad("Expires", expires),
+    pad("Days left", String(daysLeft)),
+    pad("Status", a.status),
+    a.telegramId ? pad("Telegram", a.telegramId) : "",
+    `└${line}`,
+    "",
+    detail?.subscriptionUrl ? `Status link: ${detail.subscriptionUrl}` : "",
+    "",
+    "✦ Enjoy your service ✦",
+  ].filter(Boolean);
+
+  return info.join("\n");
+}
+
