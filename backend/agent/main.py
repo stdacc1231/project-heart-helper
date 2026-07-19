@@ -462,13 +462,23 @@ def _vmess_link(username: str, host: str, port: int, uid: str, *, tls: bool) -> 
     return "vmess://" + base64.b64encode(json.dumps(cfg, separators=(",", ":")).encode()).decode()
 
 
-def _xray_uri(proto: str, username: str, host: str, port: int, uid: str, *, tls: bool) -> str:
-    path = f"/{proto}"
+def _xray_uri(proto: str, username: str, host: str, port: int, uid: str, *, tls: bool, network: str = "ws") -> str:
+    path = f"/{proto}" if network == "ws" else f"/{proto}-xh"
     security = "tls" if tls else "none"
     suffix = quote(username, safe="")
     if proto == "vless":
-        return f"vless://{uid}@{host}:{port}?type=ws&security={security}&host={quote(host)}&path={quote(path, safe='')}#{suffix}"
-    return f"trojan://{uid}@{host}:{port}?type=ws&security={security}&host={quote(host)}&path={quote(path, safe='')}#{suffix}"
+        return f"vless://{uid}@{host}:{port}?type={network}&security={security}&host={quote(host)}&path={quote(path, safe='')}&sni={quote(host)}#{suffix}"
+    return f"trojan://{uid}@{host}:{port}?type={network}&security={security}&host={quote(host)}&path={quote(path, safe='')}&sni={quote(host)}#{suffix}"
+
+
+def _vmess_link_net(username: str, host: str, port: int, uid: str, *, tls: bool, network: str = "ws") -> str:
+    path = "/vmess" if network == "ws" else "/vmess-xh"
+    cfg = {
+        "v": "2", "ps": username, "add": host, "port": str(port), "id": uid,
+        "aid": "0", "scy": "auto", "net": network, "type": "none",
+        "host": host, "path": path, "tls": "tls" if tls else "", "sni": host if tls else "",
+    }
+    return "vmess://" + base64.b64encode(json.dumps(cfg, separators=(",", ":")).encode()).decode()
 
 
 def connection_profiles(a: dict) -> list[dict[str, Any]]:
@@ -486,28 +496,42 @@ def connection_profiles(a: dict) -> list[dict[str, Any]]:
         })
         for p in tls_ports:
             out.append({
-                "label": f"SSH WebSocket TLS :{p}", "network": "ws", "security": "tls", "host": host,
+                "label": f"SSH WS · TLS :{p}", "network": "ws", "security": "tls", "host": host,
                 "port": p, "path": "/", "username": login_user, "password": a.get("password") or "",
                 "link": f"ssh-ws://{quote(login_user)}:{quote(a.get('password') or '')}@{host}:{p}/?security=tls",
                 "text": f"Host/SNI: {host}\nPort: {p}\nTLS: on\nWebSocket path: /\nUsername: {login_user}\nPassword: {a.get('password') or ''}",
             })
         for p in plain_ports:
             out.append({
-                "label": f"SSH WebSocket plain :{p}", "network": "ws", "security": "none", "host": host,
+                "label": f"SSH WS · plain :{p}", "network": "ws", "security": "none", "host": host,
                 "port": p, "path": "/", "username": login_user, "password": a.get("password") or "",
                 "link": f"ssh-ws://{quote(login_user)}:{quote(a.get('password') or '')}@{host}:{p}/?security=none",
                 "text": f"Host: {host}\nPort: {p}\nTLS: off\nWebSocket path: /\nUsername: {login_user}\nPassword: {a.get('password') or ''}",
             })
         return out
     uid = a.get("uuid") or ""
-    path = f"/{a['protocol']}"
+    proto = a["protocol"]
+    def _mk(port: int, tls: bool, network: str):
+        if proto == "vmess":
+            link = _vmess_link_net(a["username"], host, port, uid, tls=tls, network=network)
+        else:
+            link = _xray_uri(proto, a["username"], host, port, uid, tls=tls, network=network)
+        transport = "WS" if network == "ws" else "xHTTP"
+        sec = "TLS" if tls else "plain"
+        path = f"/{proto}" if network == "ws" else f"/{proto}-xh"
+        return {
+            "label": f"{proto.upper()} · {transport} · {sec} :{port}",
+            "network": network, "security": "tls" if tls else "none",
+            "host": host, "port": port, "path": path, "link": link, "text": link,
+        }
     for p in tls_ports:
-        link = _vmess_link(a["username"], host, p, uid, tls=True) if a["protocol"] == "vmess" else _xray_uri(a["protocol"], a["username"], host, p, uid, tls=True)
-        out.append({"label": f"{a['protocol'].upper()} WS TLS :{p}", "network": "ws", "security": "tls", "host": host, "port": p, "path": path, "link": link, "text": link})
+        out.append(_mk(p, True, "ws"))
+        out.append(_mk(p, True, "xhttp"))
     for p in plain_ports:
-        link = _vmess_link(a["username"], host, p, uid, tls=False) if a["protocol"] == "vmess" else _xray_uri(a["protocol"], a["username"], host, p, uid, tls=False)
-        out.append({"label": f"{a['protocol'].upper()} WS plain :{p}", "network": "ws", "security": "none", "host": host, "port": p, "path": path, "link": link, "text": link})
+        out.append(_mk(p, False, "ws"))
+        out.append(_mk(p, False, "xhttp"))
     return out
+
 
 
 def active_ips_for_account(a: dict) -> list[dict[str, str]]:
