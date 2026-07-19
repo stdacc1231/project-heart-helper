@@ -1103,15 +1103,24 @@ def accounts_create(inp: AccountIn, user: str = Depends(require_auth)):
             raise HTTPException(409, "Username already exists")
         raise HTTPException(400, f"Account validation failed: {exc}")
     a = row_to_account(r)
+    warning: str | None = None
     try:
         provision_account(a)
-    except HTTPException:
+    except HTTPException as exc:
+        # Keep the account, mark it pending so admin can retry, and surface the exact error.
+        warning = str(exc.detail) if hasattr(exc, "detail") else "Provisioning failed"
         with db() as c:
-            c.execute("DELETE FROM accounts WHERE id = ?", (aid,))
-        raise
-    log("audit", "account.create", f"Created {proto} account {username}",
+            c.execute("UPDATE accounts SET status = 'pending' WHERE id = ?", (aid,))
+            r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
+        a = row_to_account(r)
+        log("critical", "account.provision", f"Provisioning failed for {username}: {warning}",
+            actor=user, target=username)
+    log("audit", "account.create", f"Created {proto} account {username}" + (" (pending — see alerts)" if warning else ""),
         actor=user, target=username)
+    if warning:
+        a["warning"] = warning
     return a
+
 
 
 @app.patch("/accounts/{aid}")
