@@ -1549,6 +1549,13 @@ def settings_save(inp: SettingsIn, user: str = Depends(require_auth)):
                     raise HTTPException(400, f"Invalid {proto} port")
                 kv_set(f"ports.{proto}", str(p))
         changed["endpoints"] = inp.endpoints
+    if inp.sshBanner is not None:
+        kv_set("ssh.banner", inp.sshBanner)
+        write_pre_auth_banner()
+        changed["sshBanner"] = True
+    if inp.autoSuspend is not None:
+        kv_set("panel.autoSuspend", "1" if inp.autoSuspend else "0")
+        changed["autoSuspend"] = inp.autoSuspend
     apply = Path(INSTALL_ROOT) / "backend" / "scripts" / "apply_settings.sh"
     if apply.exists():
         subprocess.Popen(["bash", str(apply)])
@@ -1556,6 +1563,48 @@ def settings_save(inp: SettingsIn, user: str = Depends(require_auth)):
     if any(k in changed for k in ("domain", "port")):
         subprocess.Popen(["bash", "-lc", "nohup bash -c 'sleep 2; systemctl restart autoscript-agent' >/dev/null 2>&1 &"])
     return settings_get(user)
+
+
+@app.get("/settings/banner/preview")
+def settings_banner_preview(_: str = Depends(require_auth)):
+    """Render the current banner template with server-side variables filled in."""
+    return {"html": render_banner(kv_get("ssh.banner", DEFAULT_SSH_BANNER)),
+            "variables": BANNER_VARIABLES}
+
+
+@app.get("/internal/motd")
+def internal_motd(username: str, x_internal_token: str = Header(default="")):
+    """Called by the SSH login shell (grvpn-motd) to render the per-user banner."""
+    if not INTERNAL_TOKEN or x_internal_token != INTERNAL_TOKEN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
+    # Strip the 'grvpn-' prefix if the SSH system username is passed through.
+    panel_user = username[6:] if username.startswith("grvpn-") else username
+    with db() as c:
+        r = c.execute("SELECT * FROM accounts WHERE username = ? AND protocol = 'ssh'", (panel_user,)).fetchone()
+    if not r:
+        return {"html": render_banner(kv_get("ssh.banner", DEFAULT_SSH_BANNER))}
+    a = row_to_account(r)
+    try:
+        exp = datetime.fromisoformat(a["expiresAt"].replace("Z", "+00:00"))
+        days_left = max(0, (exp - datetime.now(timezone.utc)).days)
+        exp_str = exp.strftime("%Y-%m-%d")
+    except Exception:
+        days_left = 0; exp_str = a.get("expiresAt", "")
+    quota = int(a.get("quotaGb") or 0)
+    used_gb = round(int(a.get("usedBytes") or 0) / (1024 ** 3), 2)
+    remaining = max(0, quota - used_gb) if quota else 0
+    extra = {
+        "{{USERNAME}}":     a["username"],
+        "{{IP_LIMIT}}":     str(a.get("ipLimit") or 0),
+        "{{DAYS_LEFT}}":    str(days_left),
+        "{{EXPIRES}}":      exp_str,
+        "{{USED_GB}}":      f"{used_gb:.2f}",
+        "{{QUOTA_GB}}":     "unlimited" if not quota else str(quota),
+        "{{REMAINING_GB}}": "unlimited" if not quota else f"{remaining:.2f}",
+        "{{STATUS}}":       a.get("status", "active"),
+    }
+    return {"html": render_banner(kv_get("ssh.banner", DEFAULT_SSH_BANNER), extra)}
+
 
 
 @app.post("/settings/password")
