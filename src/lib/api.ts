@@ -132,7 +132,15 @@ export interface SystemStatus {
   loadAvg?: [number, number, number];
 }
 
-export interface TrafficPoint { t: string; rxBytes: number; txBytes: number; }
+export interface TrafficPoint {
+  t: string;
+  rxBytes: number;
+  txBytes: number;
+  xrayRxBytes?: number;
+  xrayTxBytes?: number;
+  sshRxBytes?: number;
+  sshTxBytes?: number;
+}
 
 export interface LogEntry {
   id: string; ts: string;
