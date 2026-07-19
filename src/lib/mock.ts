@@ -25,8 +25,9 @@ interface MockDB {
   wallet: WalletTx[];
   walletBalanceCents: number;
   invoices: Invoice[];
-  
+  cdns: Cdn[];
 }
+
 
 function load(): MockDB {
   if (typeof window === "undefined") return seed();
