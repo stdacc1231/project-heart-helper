@@ -9,7 +9,7 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({ meta: [{ title: "Sign in — Autoscript Panel" }] }),
+  head: () => ({ meta: [{ title: "Sign in — GRVPN Panel" }] }),
   component: LoginPage,
 });
 
@@ -36,7 +36,7 @@ function LoginPage() {
       <div className="relative grid w-full max-w-5xl gap-8 lg:grid-cols-[1.15fr_1fr] lg:items-center">
         {/* Brand column */}
         <div className="hidden lg:block">
-          <div className="mono mb-3 text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Autoscript · Ops Panel</div>
+          <div className="mono mb-3 text-[11px] uppercase tracking-[0.3em] text-muted-foreground">GRVPN · Ops Panel</div>
           <h1 className="font-display text-5xl font-semibold leading-[1.05] tracking-tight">
             <span className="aurora-text">Secure VPS control.</span>
             <br />

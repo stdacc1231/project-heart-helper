@@ -12,7 +12,7 @@ import { api, type BotSettings } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/bot")({
-  head: () => ({ meta: [{ title: "Telegram Bot — Autoscript Panel" }] }),
+  head: () => ({ meta: [{ title: "Telegram Bot — GRVPN Panel" }] }),
   component: BotPage,
 });
 

@@ -12,7 +12,7 @@ import { api, formatMoney } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/wallet")({
-  head: () => ({ meta: [{ title: "Wallet — Autoscript" }] }),
+  head: () => ({ meta: [{ title: "Wallet — GRVPN" }] }),
   component: WalletPage,
 });
 

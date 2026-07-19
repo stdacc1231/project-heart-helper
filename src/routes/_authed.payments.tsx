@@ -10,7 +10,7 @@ import { api, formatMoney, type Payment } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/payments")({
-  head: () => ({ meta: [{ title: "Payments — Autoscript Panel" }] }),
+  head: () => ({ meta: [{ title: "Payments — GRVPN Panel" }] }),
   component: PaymentsPage,
 });
 

@@ -12,7 +12,7 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/xray")({
-  head: () => ({ meta: [{ title: "Xray core — Autoscript Panel" }] }),
+  head: () => ({ meta: [{ title: "Xray core — GRVPN Panel" }] }),
   component: XrayPage,
 });
 

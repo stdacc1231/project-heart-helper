@@ -15,7 +15,7 @@ import { api, formatMoney, type Plan, type PlanMode } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/plans")({
-  head: () => ({ meta: [{ title: "Plans — Autoscript Panel" }] }),
+  head: () => ({ meta: [{ title: "Plans — GRVPN Panel" }] }),
   component: PlansPage,
 });
 

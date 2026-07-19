@@ -9,7 +9,7 @@ import { api, formatMoney } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/invoices")({
-  head: () => ({ meta: [{ title: "Invoices — Autoscript" }] }),
+  head: () => ({ meta: [{ title: "Invoices — GRVPN" }] }),
   component: InvoicesPage,
 });
 

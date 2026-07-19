@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/alerts")({
-  head: () => ({ meta: [{ title: "Alerts — Autoscript" }] }),
+  head: () => ({ meta: [{ title: "Alerts — GRVPN" }] }),
   component: AlertsPage,
 });
 

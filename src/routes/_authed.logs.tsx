@@ -7,7 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/_authed/logs")({
-  head: () => ({ meta: [{ title: "Logs — Autoscript Panel" }] }),
+  head: () => ({ meta: [{ title: "Logs — GRVPN Panel" }] }),
   component: LogsPage,
 });
 

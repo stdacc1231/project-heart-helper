@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/update")({
-  head: () => ({ meta: [{ title: "Update — Autoscript Panel" }] }),
+  head: () => ({ meta: [{ title: "Update — GRVPN Panel" }] }),
   component: UpdatePage,
 });
 

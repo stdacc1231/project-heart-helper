@@ -1,4 +1,4 @@
-// Autoscript Panel service worker — offline app shell.
+// GRVPN Panel service worker — offline app shell.
 // Strategy:
 //  - HTML navigations: network-first, fall back to cached shell.
 //  - Static assets under /_build/, /assets/, /favicon.ico, fonts: cache-first.

@@ -16,7 +16,7 @@ import { api, formatBytes, PROTOCOL_LABELS, type Account, type Protocol } from "
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/accounts")({
-  head: () => ({ meta: [{ title: "Accounts — Autoscript Panel" }] }),
+  head: () => ({ meta: [{ title: "Accounts — GRVPN Panel" }] }),
   component: AccountsPage,
 });
 
