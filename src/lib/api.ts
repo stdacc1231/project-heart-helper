@@ -363,7 +363,13 @@ export const api = {
   logs: {
     async list(type?: "audit" | "service" | "auth") { return IS_PREVIEW ? mock.logs(type) : req<LogEntry[]>(`/logs${type ? `?type=${type}` : ""}`); },
   },
+  cdns: {
+    async list() { return IS_PREVIEW ? mock.listCdns() : req<Cdn[]>("/cdns"); },
+    async save(c: Partial<Cdn>) { return IS_PREVIEW ? mock.saveCdn(c) : req<Cdn>(c.id ? `/cdns/${c.id}` : "/cdns", { method: c.id ? "PATCH" : "POST", body: JSON.stringify(c) }); },
+    async remove(id: string) { return IS_PREVIEW ? mock.removeCdn(id) : req(`/cdns/${id}`, { method: "DELETE" }); },
+  },
 };
+
 
 export function formatBytes(n: number) {
   if (!n) return "0 B";
