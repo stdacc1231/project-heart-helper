@@ -315,8 +315,6 @@ class SettingsIn(BaseModel):
     endpoints: Optional[dict[str, dict[str, Any]]] = None
     sshBanner: Optional[str] = None
     autoSuspend: Optional[bool] = None
-    webhookUrl: Optional[str] = None
-    webhookSecret: Optional[str] = None
 
 
 
