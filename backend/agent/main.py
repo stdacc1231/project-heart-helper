@@ -508,13 +508,18 @@ def _vmess_link(username: str, host: str, port: int, uid: str, *, tls: bool) -> 
 
 
 
+def _xray_path(proto: str, network: str) -> str:
+    if network == "ws":
+        return f"/{proto}"
+    if network == "xhttp":
+        return f"/{proto}-xh"
+    if network == "httpupgrade":
+        return f"/{proto}-hu"
+    return ""  # tcp — no path
+
+
 def _xray_uri(proto: str, username: str, host: str, port: int, uid: str, *, tls: bool, network: str = "ws") -> str:
-    if network == "tcp":
-        path = ""
-    elif network == "ws":
-        path = f"/{proto}"
-    else:  # xhttp
-        path = f"/{proto}-xh"
+    path = _xray_path(proto, network)
     security = "tls" if tls else "none"
     suffix = quote(username, safe="")
     query = f"type={network}&security={security}&host={quote(host)}&sni={quote(host)}"
@@ -526,12 +531,7 @@ def _xray_uri(proto: str, username: str, host: str, port: int, uid: str, *, tls:
 
 
 def _vmess_link_tcp(username: str, host: str, port: int, uid: str, *, tls: bool, network: str) -> str:
-    if network == "tcp":
-        path = ""
-    elif network == "ws":
-        path = "/vmess"
-    else:
-        path = "/vmess-xh"
+    path = _xray_path("vmess", network)
     cfg = {
         "v": "2", "ps": username, "add": host, "port": str(port), "id": uid,
         "aid": "0", "scy": "auto", "net": network, "type": "none",
@@ -575,20 +575,21 @@ def connection_profiles(a: dict) -> list[dict[str, Any]]:
             link = _vmess_link_tcp(a["username"], host, port, uid, tls=tls, network=network)
         else:
             link = _xray_uri(proto, a["username"], host, port, uid, tls=tls, network=network)
-        transport = {"ws": "WS", "xhttp": "xHTTP", "tcp": "TCP"}[network]
+        transport_label = {"ws": "WS", "xhttp": "xHTTP", "httpupgrade": "HTTPUpgrade", "tcp": "TCP"}[network]
         sec = "TLS" if tls else "nTLS"
-        path = "" if network == "tcp" else (f"/{proto}" if network == "ws" else f"/{proto}-xh")
         return {
-            "label": f"{proto.upper()} · {transport} · {sec} :{port}",
+            "label": f"{proto.upper()} · {transport_label} · {sec} :{port}",
             "network": network, "security": "tls" if tls else "none",
-            "host": host, "port": port, "path": path, "link": link, "text": link,
+            "host": host, "port": port, "path": _xray_path(proto, network),
+            "link": link, "text": link,
         }
 
-    # Only 443 (TLS) + 80 (plain). Every xray transport shown for each.
-    for network in ("ws", "xhttp", "tcp"):
+    # 443 (TLS) + 80 (plain), every routable transport per port.
+    for network in ("ws", "xhttp", "httpupgrade"):
         out.append(_mk(443, True, network))
         out.append(_mk(80, False, network))
     return out
+
 
 
 
@@ -2075,6 +2076,121 @@ def logs_list(type: Optional[str] = None, limit: int = 200, _: str = Depends(req
     return [{"id": str(r["id"]), "ts": r["ts"], "type": r["type"], "level": r["level"],
              "actor": r["actor"], "action": r["action"], "target": r["target"],
              "message": r["message"]} for r in rows]
+
+
+# ---------------------- Xray core management ----------------------
+import re as _re_xray
+
+
+def _xray_bin_version() -> str:
+    try:
+        out = subprocess.run(["/usr/local/bin/xray", "version"], capture_output=True, text=True, timeout=5)
+        m = _re_xray.search(r"Xray\s+([0-9]+\.[0-9]+\.[0-9]+)", out.stdout or "")
+        return ("v" + m.group(1)) if m else (out.stdout.strip().splitlines()[0] if out.stdout else "unknown")
+    except Exception as exc:
+        return f"error: {exc}"
+
+
+def _xray_release_tags(limit: int = 30) -> list[str]:
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=" + str(limit),
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "autoscript"},
+        )
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode())
+        return [item["tag_name"] for item in data if not item.get("prerelease")]
+    except Exception:
+        return []
+
+
+@app.get("/xray/status")
+def xray_status(_: str = Depends(require_auth)):
+    active = subprocess.run(["systemctl", "is-active", "xray"], capture_output=True, text=True).stdout.strip()
+    return {"version": _xray_bin_version(), "active": active,
+            "config_path": "/usr/local/etc/xray/config.json"}
+
+
+@app.get("/xray/versions")
+def xray_versions(_: str = Depends(require_auth)):
+    return {"current": _xray_bin_version(), "available": _xray_release_tags()}
+
+
+class XrayInstall(BaseModel):
+    version: str  # e.g. "v1.8.24" or "latest"
+
+
+@app.post("/xray/install")
+def xray_install(body: XrayInstall, _: str = Depends(require_auth)):
+    ver = body.version.strip()
+    if not _re_xray.match(r"^(latest|v?\d+\.\d+\.\d+)$", ver):
+        raise HTTPException(400, "invalid version tag")
+    if ver != "latest" and not ver.startswith("v"):
+        ver = "v" + ver
+    script = str(Path(__file__).resolve().parent.parent / "scripts" / "setup_xray.sh")
+    env = os.environ.copy()
+    env["XRAY_VERSION"] = ver
+    p = subprocess.run(["bash", script], capture_output=True, text=True, env=env, timeout=180)
+    ok = p.returncode == 0
+    log_event("xray", "info" if ok else "error", "admin", "xray.install",
+              ver, (p.stdout + "\n" + p.stderr)[-4000:])
+    if not ok:
+        raise HTTPException(500, f"install failed: {p.stderr[-400:]}")
+    return {"ok": True, "version": _xray_bin_version()}
+
+
+@app.get("/xray/logs")
+def xray_logs_ep(kind: str = "access", lines: int = 200, _: str = Depends(require_auth)):
+    path = "/var/log/xray/access.log" if kind == "access" else "/var/log/xray/error.log"
+    try:
+        p = subprocess.run(["tail", "-n", str(max(10, min(2000, lines))), path],
+                           capture_output=True, text=True, timeout=5)
+        return {"path": path, "content": p.stdout}
+    except Exception as exc:
+        raise HTTPException(500, f"log read failed: {exc}")
+
+
+@app.get("/xray/config")
+def xray_config_get(_: str = Depends(require_auth)):
+    path = Path("/usr/local/etc/xray/config.json")
+    if not path.exists():
+        raise HTTPException(404, "config missing")
+    try:
+        return {"path": str(path), "config": json.loads(path.read_text())}
+    except Exception as exc:
+        raise HTTPException(500, f"invalid config: {exc}")
+
+
+class XrayConfigBody(BaseModel):
+    config: dict
+
+
+@app.post("/xray/config")
+def xray_config_put(body: XrayConfigBody, _: str = Depends(require_auth)):
+    path = Path("/usr/local/etc/xray/config.json")
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(body.config, indent=2) + "\n")
+    p = subprocess.run(["/usr/local/bin/xray", "-test", "-config", str(tmp)],
+                       capture_output=True, text=True, timeout=10)
+    if p.returncode != 0:
+        tmp.unlink(missing_ok=True)
+        raise HTTPException(400, f"config invalid: {p.stderr or p.stdout}")
+    tmp.replace(path)
+    r = subprocess.run(["systemctl", "restart", "xray"], capture_output=True, text=True, timeout=15)
+    log_event("xray", "info" if r.returncode == 0 else "error", "admin",
+              "xray.config", "config.json", r.stderr[-400:])
+    return {"ok": r.returncode == 0}
+
+
+@app.post("/xray/restart")
+def xray_restart(_: str = Depends(require_auth)):
+    r = subprocess.run(["systemctl", "restart", "xray"], capture_output=True, text=True, timeout=15)
+    if r.returncode != 0:
+        raise HTTPException(500, r.stderr[-400:])
+    return {"ok": True}
+
+
 
 
 # ---- Reverse proxy to the TanStack Start Node server (registered last so

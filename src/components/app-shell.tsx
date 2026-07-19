@@ -2,8 +2,9 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Users, ScrollText, Settings, RefreshCw, LogOut, Menu,
   CreditCard, Package, Bot, Activity, Cloud, HardDrive, BellRing,
-  Wallet, FileText, ShieldCheck, Sun, Moon,
+  Wallet, FileText, ShieldCheck, Sun, Moon, Cpu,
 } from "lucide-react";
+
 
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -34,7 +35,9 @@ const groups: NavGroup[] = [
     { to: "/wallet",      label: "Wallet",       icon: Wallet },
   ]},
   { label: "System", items: [
+    { to: "/xray",        label: "Xray core",    icon: Cpu },
     { to: "/cdns",        label: "CDN endpoints",icon: Cloud },
+
     { to: "/backups",     label: "Backups",      icon: HardDrive },
     { to: "/bot",         label: "Telegram Bot", icon: Bot },
     { to: "/logs",        label: "Logs",         icon: ScrollText },

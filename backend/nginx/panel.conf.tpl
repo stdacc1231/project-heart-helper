@@ -6,11 +6,10 @@
 #   PLAIN_LISTENS  -> listen directives for every plain/CF port
 #   ROOT / CERT    -> install and cert paths
 #
-# Nginx here handles ONLY the VPN protocols on Cloudflare-supported ports:
+# Nginx handles ONLY the VPN protocols on Cloudflare-supported ports:
 #   - SSH-over-WebSocket on path "/"  (HTTP/1.1, plain + TLS)
-#   - xray VMess/VLESS/Trojan WebSocket paths
-# The web panel is served directly by the Python agent on a separate random
-# port with its own TLS — nothing panel-related passes through Nginx.
+#   - xray VMess/VLESS/Trojan on WS, xHTTP and HTTPUpgrade transports
+# The web panel runs on a separate random port with its own TLS.
 
 map $http_upgrade $is_ws { default 0; websocket 1; }
 
@@ -39,16 +38,19 @@ set_real_ip_from 2c0f:f248::/32;
 real_ip_header CF-Connecting-IP;
 real_ip_recursive on;
 
-# Basic rate limiting for WebSocket handshakes (fail2ban hooks into this).
 limit_req_zone $binary_remote_addr zone=vpn_ws:10m rate=30r/s;
 
-# ---------------- Plain HTTP (Cloudflare plain / orange-cloud) --------------
+# ---------- Reusable proxy blocks via named upstreams ----------
+# proto WS ports:  vmess 10001 · vless 10002 · trojan 10003
+# proto xHTTP:     vmess 10011 · vless 10012 · trojan 10013
+# proto HTTPUpgrade: vmess 10021 · vless 10022 · trojan 10023
+
+# ---------------- Plain HTTP (Cloudflare orange-cloud plain ports) ---------
 server {
 __PLAIN_LISTENS__
     server_name __SERVER_NAMES__;
     client_max_body_size 1m;
 
-    # SSH-WS on "/" (plain WebSocket path — HTTP/1.1)
     location = / {
         if ($is_ws) { rewrite ^ /__ws last; }
         return 404;
@@ -65,7 +67,7 @@ __PLAIN_LISTENS__
         proxy_read_timeout 7d; proxy_send_timeout 7d;
     }
 
-    # xray VMess/VLESS/Trojan WS on plain (some CDN plans use only plain WS)
+    # xray WebSocket
     location /vmess  { limit_req zone=vpn_ws burst=60 nodelay;
         proxy_pass http://127.0.0.1:10001; proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";
@@ -79,12 +81,37 @@ __PLAIN_LISTENS__
         proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";
         proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 7d; }
 
+    # xray xHTTP (streaming HTTP/2 style — no Upgrade header)
+    location /vmess-xh  { proxy_pass http://127.0.0.1:10011; proxy_http_version 1.1;
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr;
+        proxy_buffering off; proxy_request_buffering off; proxy_read_timeout 7d; }
+    location /vless-xh  { proxy_pass http://127.0.0.1:10012; proxy_http_version 1.1;
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr;
+        proxy_buffering off; proxy_request_buffering off; proxy_read_timeout 7d; }
+    location /trojan-xh { proxy_pass http://127.0.0.1:10013; proxy_http_version 1.1;
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr;
+        proxy_buffering off; proxy_request_buffering off; proxy_read_timeout 7d; }
+
+    # xray HTTPUpgrade (raw TCP after Upgrade — like WS but no framing)
+    location /vmess-hu  { limit_req zone=vpn_ws burst=60 nodelay;
+        proxy_pass http://127.0.0.1:10021; proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 7d; }
+    location /vless-hu  { limit_req zone=vpn_ws burst=60 nodelay;
+        proxy_pass http://127.0.0.1:10022; proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 7d; }
+    location /trojan-hu { limit_req zone=vpn_ws burst=60 nodelay;
+        proxy_pass http://127.0.0.1:10023; proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 7d; }
+
     location / { return 404; }
     access_log /var/log/nginx/autoscript-access.log;
     error_log  /var/log/nginx/autoscript-error.log;
 }
 
-# ---------------- TLS (Cloudflare-supported TLS ports) ----------------------
+# ---------------- TLS (Cloudflare-supported TLS ports) ---------------------
 server {
 __TLS_LISTENS__
     server_name __SERVER_NAMES__;
@@ -95,7 +122,6 @@ __TLS_LISTENS__
     ssl_prefer_server_ciphers on;
     client_max_body_size 1m;
 
-    # SSH over WebSocket on "/" (HTTP/1.1, no random path)
     location = / {
         if ($is_ws) { rewrite ^ /__ws last; }
         return 404;
@@ -112,7 +138,6 @@ __TLS_LISTENS__
         proxy_read_timeout 7d; proxy_send_timeout 7d;
     }
 
-    # xray WS paths
     location /vmess  { limit_req zone=vpn_ws burst=60 nodelay;
         proxy_pass http://127.0.0.1:10001; proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";
@@ -123,6 +148,29 @@ __TLS_LISTENS__
         proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 7d; }
     location /trojan { limit_req zone=vpn_ws burst=60 nodelay;
         proxy_pass http://127.0.0.1:10003; proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 7d; }
+
+    location /vmess-xh  { proxy_pass http://127.0.0.1:10011; proxy_http_version 1.1;
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr;
+        proxy_buffering off; proxy_request_buffering off; proxy_read_timeout 7d; }
+    location /vless-xh  { proxy_pass http://127.0.0.1:10012; proxy_http_version 1.1;
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr;
+        proxy_buffering off; proxy_request_buffering off; proxy_read_timeout 7d; }
+    location /trojan-xh { proxy_pass http://127.0.0.1:10013; proxy_http_version 1.1;
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr;
+        proxy_buffering off; proxy_request_buffering off; proxy_read_timeout 7d; }
+
+    location /vmess-hu  { limit_req zone=vpn_ws burst=60 nodelay;
+        proxy_pass http://127.0.0.1:10021; proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 7d; }
+    location /vless-hu  { limit_req zone=vpn_ws burst=60 nodelay;
+        proxy_pass http://127.0.0.1:10022; proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 7d; }
+    location /trojan-hu { limit_req zone=vpn_ws burst=60 nodelay;
+        proxy_pass http://127.0.0.1:10023; proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";
         proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 7d; }
 
