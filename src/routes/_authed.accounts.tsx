@@ -194,13 +194,18 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
         : new Date(f.expiresAt!).toISOString();
       return api.accounts.create({ ...f, trial: trialHours > 0 || !!f.trial, expiresAt });
     },
-    onSuccess: () => {
+    onSuccess: (acc) => {
       qc.invalidateQueries({ queryKey: ["accounts"] });
-      toast.success("Account created");
+      if (acc?.warning) {
+        toast.warning(`Account saved as pending: ${acc.warning}`);
+      } else {
+        toast.success("Account created");
+      }
       onOpenChange(false);
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   const applyPlan = (planId: string) => {
     const p = plans?.find((x) => x.id === planId);
