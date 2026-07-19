@@ -74,7 +74,7 @@ function LivePage() {
               </TableRow>
             ))}
             {rows.length === 0 && (
-              <TableRow><TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">No active sessions.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="py-12 text-center text-sm text-muted-foreground">No active sessions.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
