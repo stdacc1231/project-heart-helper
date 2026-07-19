@@ -154,8 +154,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">/panel</div>
             <div className="font-display text-lg font-semibold leading-none">{currentLabel}</div>
           </div>
-          <div className="ml-auto hidden items-center gap-2 md:flex">
-            <div className="mono flex items-center gap-2 rounded-md border border-border/60 bg-card/60 px-3 py-1.5 text-xs">
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme" title="Toggle theme">
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <div className="mono hidden items-center gap-2 rounded-md border border-border/60 bg-card/60 px-3 py-1.5 text-xs md:flex">
               <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_var(--color-primary)]" />
               <span className="text-muted-foreground">agent</span>
               <span>online</span>
@@ -166,6 +169,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span>Cloudflare</span>
             </div>
           </div>
+
         </header>
         <main className="p-4 lg:p-8">{children}</main>
       </div>
