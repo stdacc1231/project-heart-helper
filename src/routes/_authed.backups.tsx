@@ -9,7 +9,7 @@ import { api, formatBytes } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/backups")({
-  head: () => ({ meta: [{ title: "Backups — Autoscript" }] }),
+  head: () => ({ meta: [{ title: "Backups — GRVPN" }] }),
   component: BackupsPage,
 });
 

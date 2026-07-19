@@ -9,7 +9,7 @@ import { api, formatBytes, PROTOCOL_LABELS } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/connections")({
-  head: () => ({ meta: [{ title: "Live connections — Autoscript" }] }),
+  head: () => ({ meta: [{ title: "Live connections — GRVPN" }] }),
   component: LivePage,
 });
 

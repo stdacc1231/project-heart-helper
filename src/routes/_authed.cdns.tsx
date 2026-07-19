@@ -12,7 +12,7 @@ import { api, type Cdn, type CdnProtoGroup } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/cdns")({
-  head: () => ({ meta: [{ title: "CDN endpoints — Autoscript Panel" }] }),
+  head: () => ({ meta: [{ title: "CDN endpoints — GRVPN Panel" }] }),
   component: CdnsPage,
 });
 

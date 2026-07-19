@@ -12,7 +12,7 @@ import { api, formatBytes, PROTOCOL_LABELS, type Account, type ConnectionProfile
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/accounts_/$id")({
-  head: () => ({ meta: [{ title: "Account — Autoscript Panel" }] }),
+  head: () => ({ meta: [{ title: "Account — GRVPN Panel" }] }),
   component: AccountDetail,
 });
 

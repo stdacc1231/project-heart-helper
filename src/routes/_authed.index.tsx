@@ -12,7 +12,7 @@ import {
 import { api, formatDuration, formatBytes } from "@/lib/api";
 
 export const Route = createFileRoute("/_authed/")({
-  head: () => ({ meta: [{ title: "Dashboard — Autoscript Panel" }] }),
+  head: () => ({ meta: [{ title: "Dashboard — GRVPN Panel" }] }),
   component: DashboardPage,
 });
 

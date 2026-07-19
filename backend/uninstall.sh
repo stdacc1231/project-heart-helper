@@ -70,5 +70,5 @@ rm -rf /opt/autoscript /etc/autoscript
 say "Removing cron entries"
 crontab -l 2>/dev/null | grep -v autoscript | crontab - 2>/dev/null || true
 
-ok "Autoscript fully removed."
+ok "GRVPN fully removed."
 echo "You can reinstall any time with the one-liner in the README."

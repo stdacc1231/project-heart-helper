@@ -1,6 +1,6 @@
 {
-  "name": "Autoscript Panel",
-  "short_name": "Autoscript",
+  "name": "GRVPN Panel",
+  "short_name": "GRVPN",
   "description": "VPN account management, traffic and Telegram ops for your VPS.",
   "start_url": "/",
   "scope": "/",

@@ -10,7 +10,7 @@ import { api, PROTOCOL_LABELS, type PanelSettings, type Protocol } from "@/lib/a
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authed/settings")({
-  head: () => ({ meta: [{ title: "Settings — Autoscript Panel" }] }),
+  head: () => ({ meta: [{ title: "Settings — GRVPN Panel" }] }),
   component: SettingsPage,
 });
 

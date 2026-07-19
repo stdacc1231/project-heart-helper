@@ -79,23 +79,43 @@ ask()    { local __v; IFS= read -r -u 3 -p "$1" __v || __v=""; printf -v "$2" '%
 ask_pw() { local __v; IFS= read -r -s -u 3 -p "$1" __v || __v=""; echo; printf -v "$2" '%s' "$__v"; }
 
 # --------------------------------------------------------------------------
-say "Autoscript Web Panel installer"
-ask "Panel MAIN domain (e.g. panel.example.com): " PANEL_DOMAIN
-[[ -n "$PANEL_DOMAIN" ]] || die "Domain is required."
-
-echo "Certificate mode:"
-echo "  1) Single domain  (HTTP-01)"
-echo "  2) Wildcard       (DNS-01 — needs DNS API creds exported in env)"
-ask "Choose [1-2]: " TLS_MODE
+say "GRVPN Web Panel installer"
+echo
+echo "  Choose the certificate mode first:"
+echo "    ${BLD}1) Single domain${RST}   (HTTP-01, one hostname only)"
+echo "         Enter it like:  panel.example.com"
+echo "    ${BLD}2) Wildcard${RST}        (DNS-01, covers example.com AND *.example.com)"
+echo "         Enter the ROOT like:  example.com"
+echo "         (do NOT type the '*.' — the script adds it)"
+echo
+ask "Certificate mode [1-2, default 1]: " TLS_MODE
 TLS_MODE=${TLS_MODE:-1}
+[[ "$TLS_MODE" =~ ^[12]$ ]] || die "Certificate mode must be 1 or 2."
 
 DNS_API=""; ROOT_DOMAIN=""
 if [[ "$TLS_MODE" == "2" ]]; then
-  ask "Root domain for wildcard (e.g. example.com): " ROOT_DOMAIN
+  echo
+  echo "  Wildcard mode — the panel and every protocol host will share *.<root>."
+  ask "Root domain (format: example.com): " ROOT_DOMAIN
+  [[ "$ROOT_DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$ ]] \
+    || die "Root domain looks wrong. Use format: example.com (no scheme, no '*.', no path)."
+  ask "Panel hostname [panel.${ROOT_DOMAIN}]: " PANEL_DOMAIN
+  PANEL_DOMAIN=${PANEL_DOMAIN:-panel.${ROOT_DOMAIN}}
+  echo
+  echo "  acme.sh DNS module — see  https://github.com/acmesh-official/acme.sh/wiki/dnsapi"
+  echo "  Common: dns_cf (Cloudflare), dns_dgon (DigitalOcean), dns_gd (GoDaddy), dns_namesilo."
   ask "acme.sh DNS module [dns_cf]: " DNS_API
   DNS_API=${DNS_API:-dns_cf}
-  warn "Export the ${DNS_API} API credentials in this shell before continuing."
+  warn "Export the ${DNS_API} API credentials in this shell before continuing (e.g. CF_Token, CF_Account_ID)."
+else
+  echo
+  echo "  Single-domain mode — panel + every protocol share ONE hostname."
+  ask "Panel domain (format: panel.example.com): " PANEL_DOMAIN
+  [[ "$PANEL_DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$ ]] \
+    || die "Domain looks wrong. Use format: panel.example.com (no scheme, no path)."
 fi
+[[ -n "$PANEL_DOMAIN" ]] || die "Domain is required."
+
 
 ask "Admin username [admin]: " ADMIN_USER
 ADMIN_USER=${ADMIN_USER:-admin}
@@ -141,7 +161,7 @@ ok "Cloudflare components removed."
 systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true
 
 # --------------------------------------------------------------------------
-say "Fetching Autoscript repo"
+say "Fetching GRVPN repo"
 if [[ -d "$INSTALL_ROOT/.git" ]]; then
   git -C "$INSTALL_ROOT" fetch --all
   git -C "$INSTALL_ROOT" reset --hard origin/main
@@ -355,7 +375,7 @@ install -m 755 "$INSTALL_ROOT/backend/cli.sh" /usr/local/bin/autoscript
 PANEL_URL="https://${PANEL_DOMAIN}:${PANEL_PORT}/${PANEL_PATH}/"
 CREDS_FILE="${CONF_DIR}/panel-credentials.txt"
 cat >"$CREDS_FILE" <<EOF
-Autoscript Panel credentials (keep this file secret)
+GRVPN Panel credentials (keep this file secret)
 ====================================================
 URL       : ${PANEL_URL}
 Username  : ${ADMIN_USER}
