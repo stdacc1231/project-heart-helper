@@ -179,46 +179,48 @@ function AccountDetail() {
           </Card>
         )}
 
-        <Card className="p-4 lg:col-span-2">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-medium">Connection settings</h3>
-              <p className="text-xs text-muted-foreground">
-                Featuring ports <span className="font-mono">443</span> (TLS) and <span className="font-mono">80</span> (nTLS).
-                Any Cloudflare-compatible port works — clients pick their own.
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(detail?.subscriptionUrl ?? ""); toast.success("User status link copied"); }}>
-              <Copy className="mr-1 h-4 w-4" /> User status link
-            </Button>
-          </div>
-          {profiles.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No connection profiles generated.</div>
-          ) : (() => {
-            const groups: Record<string, ConnectionProfile[]> = {};
-            for (const p of profiles) {
-              const key = (p.network || "tcp").toUpperCase();
-              (groups[key] ||= []).push(p);
-            }
-            const order = ["WS", "XHTTP", "TCP"];
-            const keys = Object.keys(groups).sort((a, b) => order.indexOf(a) - order.indexOf(b));
-            return (
-              <div className="space-y-4">
-                {keys.map((k) => (
-                  <div key={k}>
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Transport</span>
-                      <Badge variant="secondary" className="mono">{k === "XHTTP" ? "xHTTP" : k}</Badge>
-                    </div>
-                    <div className="grid gap-2 md:grid-cols-2">
-                      {groups[k].map((p) => <ProfileCard key={`${p.label}-${p.port}`} profile={p} />)}
-                    </div>
-                  </div>
-                ))}
+        {data.protocol !== "ssh" && (
+          <Card className="p-4 lg:col-span-2">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-medium">Connection settings</h3>
+                <p className="text-xs text-muted-foreground">
+                  Featuring ports <span className="font-mono">443</span> (TLS) and <span className="font-mono">80</span> (nTLS).
+                  Any Cloudflare-compatible port works — clients pick their own.
+                </p>
               </div>
-            );
-          })()}
-        </Card>
+              <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(detail?.subscriptionUrl ?? ""); toast.success("User status link copied"); }}>
+                <Copy className="mr-1 h-4 w-4" /> User status link
+              </Button>
+            </div>
+            {profiles.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No connection profiles generated.</div>
+            ) : (() => {
+              const groups: Record<string, ConnectionProfile[]> = {};
+              for (const p of profiles) {
+                const key = (p.network || "tcp").toUpperCase();
+                (groups[key] ||= []).push(p);
+              }
+              const order = ["WS", "XHTTP", "TCP"];
+              const keys = Object.keys(groups).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+              return (
+                <div className="space-y-4">
+                  {keys.map((k) => (
+                    <div key={k}>
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Transport</span>
+                        <Badge variant="secondary" className="mono">{k === "XHTTP" ? "xHTTP" : k}</Badge>
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {groups[k].map((p) => <ProfileCard key={`${p.label}-${p.port}`} profile={p} />)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </Card>
+        )}
 
         {(detail?.cdns ?? []).length > 0 && (
           <Card className="p-4 lg:col-span-2">
