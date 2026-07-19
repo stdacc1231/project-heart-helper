@@ -76,14 +76,6 @@ function UserStatusPage() {
         </div>
       </Card>
 
-      <Card className="mt-4 p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-medium">Connection link</h2>
-          <Button variant="outline" size="sm" onClick={() => copy(data.configLink, "Link")}><Copy className="mr-1 h-4 w-4" /> Copy</Button>
-        </div>
-        <div className="break-all rounded-md border bg-muted/40 p-3 font-mono text-xs">{data.configLink}</div>
-        {data.configText && <Textarea readOnly value={data.configText} className="mt-3 min-h-32 font-mono text-xs" />}
-      </Card>
 
       <Card className="mt-4 p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
