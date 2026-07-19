@@ -12,10 +12,10 @@ xray_test() {
   xray run -test -config "$XRAY_CFG" >/dev/null 2>&1 || xray -test -config "$XRAY_CFG" >/dev/null 2>&1
 }
 
-# 1) Install xray-core. Try the official installer first, then a direct
-# GitHub release fallback so old VPS images still self-heal during update.
+# 1) Install xray-core. Pass XRAY_VERSION=v1.8.24 (or "latest") to pin/downgrade.
+XRAY_VERSION="${XRAY_VERSION:-}"
 install_xray_fallback() {
-  local arch asset tmp
+  local arch asset tmp ver rel
   arch="$(uname -m)"
   case "$arch" in
     x86_64|amd64) asset="Xray-linux-64.zip" ;;
@@ -23,8 +23,14 @@ install_xray_fallback() {
     armv7l|armv7*) asset="Xray-linux-arm32-v7a.zip" ;;
     *) echo "[xray] unsupported CPU arch: $arch" >&2; return 1 ;;
   esac
+  ver="${1:-latest}"
+  if [[ "$ver" == "latest" || -z "$ver" ]]; then
+    rel="latest/download"
+  else
+    rel="download/${ver}"
+  fi
   tmp="$(mktemp -d)"
-  curl -fL "https://github.com/XTLS/Xray-core/releases/latest/download/${asset}" -o "$tmp/xray.zip"
+  curl -fL "https://github.com/XTLS/Xray-core/releases/${rel}/${asset}" -o "$tmp/xray.zip"
   unzip -qo "$tmp/xray.zip" -d "$tmp/xray"
   install -m 755 "$tmp/xray/xray" /usr/local/bin/xray
   mkdir -p /usr/local/share/xray
@@ -33,13 +39,17 @@ install_xray_fallback() {
   rm -rf "$tmp"
 }
 
-if ! command -v xray >/dev/null 2>&1; then
-  echo "[xray] installing xray-core"
+if [[ -n "$XRAY_VERSION" ]]; then
+  echo "[xray] installing xray-core ${XRAY_VERSION}"
+  install_xray_fallback "$XRAY_VERSION"
+elif ! command -v xray >/dev/null 2>&1; then
+  echo "[xray] installing xray-core (latest)"
   if ! bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install; then
     echo "[xray] official installer failed, trying direct release fallback"
-    install_xray_fallback
+    install_xray_fallback "latest"
   fi
 fi
+
 
 cat >/etc/systemd/system/xray.service <<'EOF'
 [Unit]
