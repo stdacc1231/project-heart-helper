@@ -75,8 +75,8 @@ function seed(): MockDB {
         status: "active",
         telegramId: i % 2 ? String(500000000 + i * 137) : undefined,
         planId: plans[i % plans.length].id,
-        cdn: protocol === "vmess" || protocol === "vless",
         subscriptionToken: tok(),
+
         trial: false,
       });
 
