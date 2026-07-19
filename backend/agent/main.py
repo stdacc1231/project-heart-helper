@@ -1336,6 +1336,15 @@ def public_accounts_detail(aid: str):
     return account_detail_payload(aid)
 
 
+@app.get("/accounts/{aid}/traffic")
+def accounts_traffic(aid: str, _: str = Depends(require_auth)):
+    with db() as c:
+        r = c.execute("SELECT id FROM accounts WHERE id = ?", (aid,)).fetchone()
+    if not r:
+        raise HTTPException(404, "Not found")
+    return _account_traffic_buckets(aid)
+
+
 def account_detail_payload(aid: str):
     with db() as c:
         r = c.execute("SELECT * FROM accounts WHERE id = ?", (aid,)).fetchone()
@@ -1352,13 +1361,16 @@ def account_detail_payload(aid: str):
         days = 0
     limit_bytes = max(0, int(a.get("quotaGb") or 0)) * 1024 ** 3
     used = max(0, int(a.get("usedBytes") or 0))
+    traffic = _account_traffic_buckets(aid)
     return {"account": a, "configLink": cfg["link"], "configText": cfg["text"],
             "subscriptionUrl": _panel_public_url(f"/u/{aid}"),
-            "daysRemaining": days, "hourly": [], "daily": [], "activeIps": ips,
+            "daysRemaining": days, "hourly": [], "daily": traffic["daily"], "activeIps": ips,
             "loginUsername": ssh_login_username(a["username"]) if a["protocol"] == "ssh" else a["username"],
             "host": _proto_host(a["protocol"]), "tlsPorts": _tls_ports(), "plainPorts": _plain_ports(),
             "connectionProfiles": cfg.get("profiles", []),
+            "traffic": traffic,
             "usage": {"totalBytes": used, "limitBytes": limit_bytes, "remainingBytes": max(0, limit_bytes - used) if limit_bytes else 0}}
+
 
 
 def accounts_config_public(a: dict) -> dict:
