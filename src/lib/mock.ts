@@ -395,4 +395,26 @@ export const mock = {
   async settingsSave(s: Partial<PanelSettings>) { const db = load(); Object.assign(db.settings, s); save(db); return db.settings; },
 
   async logs(type?: "audit" | "service" | "auth") { const db = load(); return type ? db.logs.filter((l) => l.type === type) : db.logs; },
+
+  async listCdns() { return load().cdns; },
+  async saveCdn(c: Partial<Cdn>) {
+    const db = load();
+    if (c.id) {
+      const ex = db.cdns.find((x) => x.id === c.id);
+      if (!ex) throw new Error("Not found");
+      Object.assign(ex, c);
+      save(db); return ex;
+    }
+    const created: Cdn = {
+      id: "cdn-" + Date.now().toString(36),
+      name: c.name ?? "Untitled",
+      url: c.url ?? "",
+      protocols: c.protocols ?? [],
+      accountIds: c.accountIds ?? [],
+      createdAt: new Date().toISOString(),
+    };
+    db.cdns.unshift(created); save(db); return created;
+  },
+  async removeCdn(id: string) { const db = load(); db.cdns = db.cdns.filter((c) => c.id !== id); save(db); return { ok: true as const }; },
 };
+
