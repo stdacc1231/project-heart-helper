@@ -845,6 +845,7 @@ def _traffic_tick(interval: float = 5.0) -> None:
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     now_iso = datetime.now(timezone.utc).isoformat()
     interval = max(1.0, float(interval))
+    xray_rx_tot = xray_tx_tot = ssh_rx_tot = ssh_tx_tot = 0
     try:
         with db() as c:
             rows = c.execute("SELECT id, username, protocol FROM accounts").fetchall()
@@ -854,10 +855,12 @@ def _traffic_tick(interval: float = 5.0) -> None:
                 seen.add(uname)
                 if proto == "ssh":
                     rx, tx = _ssh_traffic_read(uname)
+                    ssh_rx_tot += rx; ssh_tx_tot += tx
                 else:
                     s = xstats.get(uname) or {}
                     rx = int(s.get("up") or 0)
                     tx = int(s.get("down") or 0)
+                    xray_rx_tot += rx; xray_tx_tot += tx
                 up_bps = int(rx * 8 / interval)
                 dn_bps = int(tx * 8 / interval)
                 if up_bps or dn_bps:
@@ -885,6 +888,22 @@ def _traffic_tick(interval: float = 5.0) -> None:
                 )
                 c.execute("UPDATE accounts SET used_bytes = COALESCE(used_bytes,0) + ? WHERE id = ?",
                           (rx + tx, aid))
+                # Persist last-known session so a panel/agent restart keeps showing connected users.
+                c.execute(
+                    "INSERT INTO session_state(username, account_id, protocol, rx_bytes, tx_bytes, up_bps, down_bps, at) "
+                    "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(username) DO UPDATE SET "
+                    "account_id=excluded.account_id, protocol=excluded.protocol, "
+                    "rx_bytes=excluded.rx_bytes, tx_bytes=excluded.tx_bytes, "
+                    "up_bps=excluded.up_bps, down_bps=excluded.down_bps, at=excluded.at",
+                    (uname, aid, proto, rx, tx, up_bps, dn_bps, now_iso),
+                )
+            # Global traffic sample with per-protocol split for the dashboard.
+            c.execute(
+                "INSERT INTO traffic_samples(ts, rx_bytes, tx_bytes, xray_rx, xray_tx, ssh_rx, ssh_tx) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (now_iso, xray_rx_tot + ssh_rx_tot, xray_tx_tot + ssh_tx_tot,
+                 xray_rx_tot, xray_tx_tot, ssh_rx_tot, ssh_tx_tot),
+            )
         for uname in list(_LIVE_RATE.keys()):
             if uname not in seen:
                 _LIVE_RATE.pop(uname, None)
