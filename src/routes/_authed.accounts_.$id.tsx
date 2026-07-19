@@ -294,6 +294,14 @@ function speed(kbps: number) {
   return kbps ? `${(kbps / 1000).toFixed(kbps % 1000 ? 1 : 0)}` : "∞";
 }
 
+function formatBps(bps: number) {
+  if (!bps || bps < 1) return "0 bps";
+  const units = ["bps", "Kbps", "Mbps", "Gbps"];
+  let i = 0; let v = bps;
+  while (v >= 1000 && i < units.length - 1) { v /= 1000; i++; }
+  return `${v.toFixed(v < 10 && i > 0 ? 2 : v < 100 && i > 0 ? 1 : 0)} ${units[i]}`;
+}
+
 function buildSummary(
   a: Account,
   detail: any,
