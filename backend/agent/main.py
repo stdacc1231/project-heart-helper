@@ -120,7 +120,16 @@ CREATE TABLE IF NOT EXISTS traffic_samples (
     tx_bytes INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_traffic_ts ON traffic_samples(ts);
+CREATE TABLE IF NOT EXISTS account_traffic (
+    account_id TEXT NOT NULL,
+    day TEXT NOT NULL,
+    rx_bytes INTEGER NOT NULL DEFAULT 0,
+    tx_bytes INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (account_id, day)
+);
+CREATE INDEX IF NOT EXISTS idx_account_traffic_day ON account_traffic(day);
 """
+
 
 
 ACCOUNT_COLUMNS = {
