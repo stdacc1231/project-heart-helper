@@ -100,6 +100,11 @@ function DashboardPage() {
         <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} total`} value={formatBytes(periodRx + periodTx)} sub="Download + upload" />
       </div>
 
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} · Xray usage`} value={formatBytes(xrayTotal)} sub="VMess / VLESS / Trojan" />
+        <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} · SSH usage`} value={formatBytes(sshTotal)} sub="SSH + SSH-WS" />
+
+
       <Card className="p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-medium">Traffic</h3>
