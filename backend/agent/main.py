@@ -304,6 +304,9 @@ class SettingsIn(BaseModel):
     tlsPorts: Optional[list[int]] = None
     plainPorts: Optional[list[int]] = None
     endpoints: Optional[dict[str, dict[str, Any]]] = None
+    sshBanner: Optional[str] = None
+    autoSuspend: Optional[bool] = None
+
 
 
 class PasswordIn(BaseModel):
