@@ -16,8 +16,8 @@ export const Route = createFileRoute("/_authed/cdns")({
   component: CdnsPage,
 });
 
-// CDN endpoints are Xray-only (SSH uses its own domain). We hardcode protocols=["xray"].
 const EMPTY: Partial<Cdn> = { name: "", url: "", protocols: ["xray"], accountIds: [] };
+const PROTO_OPTIONS = ["xray", "ssh"] as const;
 
 function CdnsPage() {
   const qc = useQueryClient();
