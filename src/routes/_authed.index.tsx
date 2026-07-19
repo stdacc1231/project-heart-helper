@@ -51,6 +51,8 @@ function DashboardPage() {
 
   const periodRx = (traffic ?? []).reduce((sum, p) => sum + p.rxBytes, 0);
   const periodTx = (traffic ?? []).reduce((sum, p) => sum + p.txBytes, 0);
+  const xrayTotal = (traffic ?? []).reduce((s, p) => s + (p.xrayRxBytes ?? 0) + (p.xrayTxBytes ?? 0), 0);
+  const sshTotal  = (traffic ?? []).reduce((s, p) => s + (p.sshRxBytes ?? 0) + (p.sshTxBytes ?? 0), 0);
 
   const chartData = (traffic ?? []).map((p) => ({
     time: range !== "24h"
@@ -97,6 +99,14 @@ function DashboardPage() {
         <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} upload`} value={formatBytes(periodTx)} sub="Selected period" />
         <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} total`} value={formatBytes(periodRx + periodTx)} sub="Download + upload" />
       </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} · Xray usage`} value={formatBytes(xrayTotal)} sub="VMess / VLESS / Trojan" />
+        <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} · SSH usage`} value={formatBytes(sshTotal)} sub="SSH + SSH-WS" />
+      </div>
+
+
+
 
       <Card className="p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

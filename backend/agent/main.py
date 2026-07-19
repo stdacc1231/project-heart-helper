@@ -117,7 +117,11 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS traffic_samples (
     ts TEXT NOT NULL,
     rx_bytes INTEGER NOT NULL,
-    tx_bytes INTEGER NOT NULL
+    tx_bytes INTEGER NOT NULL,
+    xray_rx INTEGER NOT NULL DEFAULT 0,
+    xray_tx INTEGER NOT NULL DEFAULT 0,
+    ssh_rx INTEGER NOT NULL DEFAULT 0,
+    ssh_tx INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_traffic_ts ON traffic_samples(ts);
 CREATE TABLE IF NOT EXISTS account_traffic (
@@ -128,6 +132,16 @@ CREATE TABLE IF NOT EXISTS account_traffic (
     PRIMARY KEY (account_id, day)
 );
 CREATE INDEX IF NOT EXISTS idx_account_traffic_day ON account_traffic(day);
+CREATE TABLE IF NOT EXISTS session_state (
+    username TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    protocol TEXT NOT NULL,
+    rx_bytes INTEGER NOT NULL DEFAULT 0,
+    tx_bytes INTEGER NOT NULL DEFAULT 0,
+    up_bps INTEGER NOT NULL DEFAULT 0,
+    down_bps INTEGER NOT NULL DEFAULT 0,
+    at TEXT NOT NULL
+);
 """
 
 
@@ -181,6 +195,15 @@ def _migrate(con: sqlite3.Connection) -> None:
                     con.execute(f"ALTER TABLE plans ADD COLUMN {col} {decl}")
                 except sqlite3.OperationalError as exc:
                     print(f"schema-migrate-skip plans.{col}: {exc}", flush=True)
+    have = {row["name"] for row in con.execute("PRAGMA table_info(traffic_samples)").fetchall()}
+    if have:
+        for col in ("xray_rx", "xray_tx", "ssh_rx", "ssh_tx"):
+            if col not in have:
+                try:
+                    con.execute(f"ALTER TABLE traffic_samples ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+                except sqlite3.OperationalError as exc:
+                    print(f"schema-migrate-skip traffic_samples.{col}: {exc}", flush=True)
+
 
 
 @contextmanager
@@ -822,6 +845,7 @@ def _traffic_tick(interval: float = 5.0) -> None:
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     now_iso = datetime.now(timezone.utc).isoformat()
     interval = max(1.0, float(interval))
+    xray_rx_tot = xray_tx_tot = ssh_rx_tot = ssh_tx_tot = 0
     try:
         with db() as c:
             rows = c.execute("SELECT id, username, protocol FROM accounts").fetchall()
@@ -831,10 +855,12 @@ def _traffic_tick(interval: float = 5.0) -> None:
                 seen.add(uname)
                 if proto == "ssh":
                     rx, tx = _ssh_traffic_read(uname)
+                    ssh_rx_tot += rx; ssh_tx_tot += tx
                 else:
                     s = xstats.get(uname) or {}
                     rx = int(s.get("up") or 0)
                     tx = int(s.get("down") or 0)
+                    xray_rx_tot += rx; xray_tx_tot += tx
                 up_bps = int(rx * 8 / interval)
                 dn_bps = int(tx * 8 / interval)
                 if up_bps or dn_bps:
@@ -862,6 +888,22 @@ def _traffic_tick(interval: float = 5.0) -> None:
                 )
                 c.execute("UPDATE accounts SET used_bytes = COALESCE(used_bytes,0) + ? WHERE id = ?",
                           (rx + tx, aid))
+                # Persist last-known session so a panel/agent restart keeps showing connected users.
+                c.execute(
+                    "INSERT INTO session_state(username, account_id, protocol, rx_bytes, tx_bytes, up_bps, down_bps, at) "
+                    "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(username) DO UPDATE SET "
+                    "account_id=excluded.account_id, protocol=excluded.protocol, "
+                    "rx_bytes=excluded.rx_bytes, tx_bytes=excluded.tx_bytes, "
+                    "up_bps=excluded.up_bps, down_bps=excluded.down_bps, at=excluded.at",
+                    (uname, aid, proto, rx, tx, up_bps, dn_bps, now_iso),
+                )
+            # Global traffic sample with per-protocol split for the dashboard.
+            c.execute(
+                "INSERT INTO traffic_samples(ts, rx_bytes, tx_bytes, xray_rx, xray_tx, ssh_rx, ssh_tx) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (now_iso, xray_rx_tot + ssh_rx_tot, xray_tx_tot + ssh_tx_tot,
+                 xray_rx_tot, xray_tx_tot, ssh_rx_tot, ssh_tx_tot),
+            )
         for uname in list(_LIVE_RATE.keys()):
             if uname not in seen:
                 _LIVE_RATE.pop(uname, None)
@@ -904,7 +946,7 @@ def _account_traffic_buckets(aid: str) -> dict:
 
 
 def _scheduler_loop() -> None:
-    time.sleep(30)
+    time.sleep(5)
     tick = 0
     while True:
         tick += 1
@@ -938,6 +980,31 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
 def _start_scheduler() -> None:
     import threading
     write_pre_auth_banner()
+    # Rehydrate connected-user state from disk so a panel restart keeps the
+    # Connections view populated (real live-rate values recover on next tick).
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=180)
+        with db() as c:
+            rows = c.execute("SELECT * FROM session_state").fetchall()
+        for r in rows:
+            try:
+                at = datetime.fromisoformat(r["at"])
+            except Exception:
+                continue
+            if at < cutoff:
+                continue
+            uname = r["username"]
+            _LAST_ACTIVITY[uname] = {"rx": int(r["rx_bytes"]), "tx": int(r["tx_bytes"]),
+                                     "at": r["at"], "protocol": r["protocol"], "accountId": r["account_id"]}
+            _LIVE_RATE[uname] = {"upBps": int(r["up_bps"]), "downBps": int(r["down_bps"]),
+                                 "at": r["at"], "protocol": r["protocol"], "accountId": r["account_id"]}
+    except Exception as exc:
+        print(f"session-state-restore-failed: {exc}", flush=True)
+    # Prime xray reset counter so the first tick's delta is small, not a spike.
+    try:
+        _xray_stats_query(reset=True)
+    except Exception:
+        pass
     t = threading.Thread(target=_scheduler_loop, name="autoscript-scheduler", daemon=True)
     t.start()
 
@@ -1089,18 +1156,24 @@ def system_traffic(range: str = "24h", _: str = Depends(require_auth)):
     since = datetime.now(timezone.utc) - timedelta(minutes=since_min)
     with db() as c:
         rows = c.execute(
-            "SELECT ts, rx_bytes, tx_bytes FROM traffic_samples WHERE ts >= ? ORDER BY ts",
+            "SELECT ts, rx_bytes, tx_bytes, xray_rx, xray_tx, ssh_rx, ssh_tx "
+            "FROM traffic_samples WHERE ts >= ? ORDER BY ts",
             (since.isoformat(),)
         ).fetchall()
-    # bucket
+    # bucket: [rx, tx, xray_rx, xray_tx, ssh_rx, ssh_tx]
     buckets: dict[int, list[int]] = {}
     for r in rows:
         t = datetime.fromisoformat(r["ts"]).timestamp()
         key = int(t // bucket_sec) * bucket_sec
-        b = buckets.setdefault(key, [0, 0])
+        b = buckets.setdefault(key, [0, 0, 0, 0, 0, 0])
         b[0] += r["rx_bytes"]; b[1] += r["tx_bytes"]
+        b[2] += r["xray_rx"] or 0; b[3] += r["xray_tx"] or 0
+        b[4] += r["ssh_rx"] or 0;  b[5] += r["ssh_tx"] or 0
     return [
-        {"t": datetime.fromtimestamp(k, timezone.utc).isoformat(), "rxBytes": v[0], "txBytes": v[1]}
+        {"t": datetime.fromtimestamp(k, timezone.utc).isoformat(),
+         "rxBytes": v[0], "txBytes": v[1],
+         "xrayRxBytes": v[2], "xrayTxBytes": v[3],
+         "sshRxBytes": v[4], "sshTxBytes": v[5]}
         for k, v in sorted(buckets.items())
     ]
 
