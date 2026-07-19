@@ -332,17 +332,27 @@ function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b:
   );
 }
 
+function genUser(prefix = "trial") {
+  const s = Math.random().toString(36).slice(2, 8);
+  return `${prefix}-${s}`;
+}
+function genPass(len = 10) {
+  const alpha = "abcdefghijkmnpqrstuvwxyz23456789";
+  let out = "";
+  for (let i = 0; i < len; i++) out += alpha[Math.floor(Math.random() * alpha.length)];
+  return out;
+}
+
 function TrialDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
   const [hours, setHours] = useState<number>(1);
   const [protocol, setProtocol] = useState<Protocol>("ssh");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [telegramId, setTelegramId] = useState("");
+  const [username, setUsername] = useState(() => genUser());
+  const [password, setPassword] = useState(() => genPass());
   const [ipLimit, setIpLimit] = useState(1);
   const qc = useQueryClient();
   const create = useMutation({
     mutationFn: () => api.accounts.create({
-      protocol, username, password, telegramId: telegramId || undefined,
+      protocol, username, password: protocol === "ssh" ? password : undefined,
       ipLimit, speedUpKbps: 0, speedDnKbps: 0, quotaGb: 0,
       trial: true,
       expiresAt: new Date(Date.now() + Math.max(1, hours) * 3600_000).toISOString(),
@@ -350,13 +360,15 @@ function TrialDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: 
     onSuccess: (acc) => {
       qc.invalidateQueries({ queryKey: ["accounts"] });
       if (acc?.warning) toast.warning(`Trial saved as pending: ${acc.warning}`);
-      else toast.success(`Trial account created (${hours}h)`);
+      else {
+        const creds = protocol === "ssh" ? `${username} / ${password}` : username;
+        toast.success(`Trial created (${hours}h) — ${creds}`);
+      }
       onOpenChange(false);
-      setUsername(""); setPassword(""); setTelegramId("");
+      setUsername(genUser()); setPassword(genPass());
     },
     onError: (e: Error) => toast.error(e.message),
   });
-
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -377,7 +389,7 @@ function TrialDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: 
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Duration (hours)</Label>
+            <Label>Duration</Label>
             <div className="flex items-center gap-1">
               <Input type="number" min={1} value={hours} onChange={(e) => setHours(Math.max(1, +e.target.value || 1))} />
               <Button type="button" size="sm" variant="outline" onClick={() => setHours(1)}>1h</Button>
@@ -385,21 +397,26 @@ function TrialDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: 
               <Button type="button" size="sm" variant="outline" onClick={() => setHours(24)}>24h</Button>
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label>Username</Label>
-            <Input value={username} onChange={(e) => setUsername(e.target.value)} />
+          <div className="col-span-2 space-y-1.5">
+            <Label>Username (auto)</Label>
+            <div className="flex items-center gap-1">
+              <Input value={username} onChange={(e) => setUsername(e.target.value)} className="font-mono" />
+              <Button type="button" size="sm" variant="outline" onClick={() => setUsername(genUser())}>Regen</Button>
+            </div>
           </div>
           {protocol === "ssh" && (
-            <div className="space-y-1.5">
-              <Label>Password</Label>
-              <Input value={password} onChange={(e) => setPassword(e.target.value)} />
+            <div className="col-span-2 space-y-1.5">
+              <Label>Password (auto — shown to admin)</Label>
+              <div className="flex items-center gap-1">
+                <Input value={password} onChange={(e) => setPassword(e.target.value)} className="font-mono" />
+                <Button type="button" size="sm" variant="outline" onClick={() => setPassword(genPass())}>Regen</Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(`${username} / ${password}`); toast.success("Copied"); }}>
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
           )}
-          <div className="space-y-1.5">
-            <Label>Telegram ID</Label>
-            <Input placeholder="optional" value={telegramId} onChange={(e) => setTelegramId(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
+          <div className="col-span-2 space-y-1.5">
             <Label>IP limit</Label>
             <Input type="number" min={1} value={ipLimit} onChange={(e) => setIpLimit(+e.target.value || 1)} />
           </div>
