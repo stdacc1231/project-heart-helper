@@ -1836,7 +1836,23 @@ def internal_motd(username: str, x_internal_token: str = Header(default="")):
         "{{REMAINING_GB}}": "unlimited" if not quota else f"{remaining:.2f}",
         "{{STATUS}}":       a.get("status", "active"),
     }
-    return {"html": render_banner(kv_get("ssh.banner", DEFAULT_SSH_BANNER), extra)}
+    banner_html = render_banner(kv_get("ssh.banner", DEFAULT_SSH_BANNER), extra)
+    quota_line = "unlimited" if not quota else f"{used_gb:.2f} / {quota} GB  ({remaining:.2f} GB left)"
+    ip_line = "unlimited" if not int(a.get("ipLimit") or 0) else str(a["ipLimit"])
+    suspend_note = "auto-suspend on quota/expiry" if kv_get("auto_suspend", "1") == "1" else "auto-suspend disabled"
+    info_html = (
+        '<div style="text-align:left;margin-top:6px;">'
+        f'<h3><font color="#00E5FF">── Account ──</font></h3>'
+        f'<h4>User      : <font color="#F6BE00">{a["username"]}</font></h4>'
+        f'<h4>Status    : <font color="green">{a.get("status","active")}</font></h4>'
+        f'<h4>IP limit  : <font color="yellow">{ip_line}</font></h4>'
+        f'<h4>Data used : <font color="#F6BE00">{quota_line}</font></h4>'
+        f'<h4>Expires   : <font color="#ffff">{exp_str}  ({days_left} days left)</font></h4>'
+        f'<h4><font color="red">{suspend_note}</font></h4>'
+        '</div>'
+    )
+    return {"html": banner_html + info_html}
+
 
 
 
