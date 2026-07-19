@@ -27,13 +27,16 @@ function AccountsPage() {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [trialOpen, setTrialOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { data } = useQuery({
     queryKey: ["accounts", proto],
     queryFn: () => api.accounts.list(proto === "all" ? undefined : proto),
+    refetchInterval: 15000,
   });
+
 
   const remove = useMutation({
     mutationFn: (id: string) => api.accounts.remove(id),
