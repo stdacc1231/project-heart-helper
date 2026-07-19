@@ -117,6 +117,8 @@ export interface PanelSettings {
   sshBanner?: string;
   sshBannerVariables?: Record<string, string>;
   autoSuspend?: boolean;
+  webhookUrl?: string;
+  webhookSecret?: string;
 }
 
 
