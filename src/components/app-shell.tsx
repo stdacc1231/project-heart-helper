@@ -34,6 +34,7 @@ const groups: NavGroup[] = [
     { to: "/wallet",      label: "Wallet",       icon: Wallet },
   ]},
   { label: "System", items: [
+    { to: "/cdns",        label: "CDN endpoints",icon: Cloud },
     { to: "/backups",     label: "Backups",      icon: HardDrive },
     { to: "/bot",         label: "Telegram Bot", icon: Bot },
     { to: "/logs",        label: "Logs",         icon: ScrollText },
@@ -41,6 +42,7 @@ const groups: NavGroup[] = [
     { to: "/settings",    label: "Settings",     icon: Settings },
   ]},
 ];
+
 
 
 export function AppShell({ children }: { children: ReactNode }) {
