@@ -1777,10 +1777,6 @@ def settings_save(inp: SettingsIn, user: str = Depends(require_auth)):
     if inp.autoSuspend is not None:
         kv_set("panel.autoSuspend", "1" if inp.autoSuspend else "0")
         changed["autoSuspend"] = inp.autoSuspend
-    if inp.webhookUrl is not None:
-        kv_set("webhook.url", inp.webhookUrl.strip()); changed["webhookUrl"] = True
-    if inp.webhookSecret is not None:
-        kv_set("webhook.secret", inp.webhookSecret.strip()); changed["webhookSecret"] = True
     apply = Path(INSTALL_ROOT) / "backend" / "scripts" / "apply_settings.sh"
     if apply.exists():
         subprocess.Popen(["bash", str(apply)])
