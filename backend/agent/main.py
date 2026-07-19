@@ -195,6 +195,15 @@ def _migrate(con: sqlite3.Connection) -> None:
                     con.execute(f"ALTER TABLE plans ADD COLUMN {col} {decl}")
                 except sqlite3.OperationalError as exc:
                     print(f"schema-migrate-skip plans.{col}: {exc}", flush=True)
+    have = {row["name"] for row in con.execute("PRAGMA table_info(traffic_samples)").fetchall()}
+    if have:
+        for col in ("xray_rx", "xray_tx", "ssh_rx", "ssh_tx"):
+            if col not in have:
+                try:
+                    con.execute(f"ALTER TABLE traffic_samples ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+                except sqlite3.OperationalError as exc:
+                    print(f"schema-migrate-skip traffic_samples.{col}: {exc}", flush=True)
+
 
 
 @contextmanager
