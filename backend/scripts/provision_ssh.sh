@@ -71,8 +71,24 @@ else
     || { echo "useradd failed for $SYSUSER" >&2; exit 1; }
 fi
 
-echo "${SYSUSER}:${PASSWORD}" | chpasswd \
-  || { echo "chpasswd failed for $SYSUSER" >&2; exit 1; }
+# Hash the password ourselves and set it with `usermod -p` so PAM cracklib
+# does NOT reject weak passwords or ones that look like the username.
+HASH=""
+if command -v openssl >/dev/null 2>&1; then
+  HASH="$(openssl passwd -6 "$PASSWORD" 2>/dev/null || true)"
+fi
+if [ -z "$HASH" ] && command -v python3 >/dev/null 2>&1; then
+  HASH="$(python3 -c 'import crypt,sys; print(crypt.crypt(sys.argv[1], crypt.mksalt(crypt.METHOD_SHA512)))' "$PASSWORD" 2>/dev/null || true)"
+fi
+if [ -n "$HASH" ]; then
+  usermod -p "$HASH" "$SYSUSER" \
+    || { echo "usermod -p failed for $SYSUSER" >&2; exit 1; }
+else
+  # Last-resort fallback: chpasswd (may hit PAM cracklib for weak passwords).
+  echo "${SYSUSER}:${PASSWORD}" | chpasswd -c SHA512 2>/dev/null \
+    || echo "${SYSUSER}:${PASSWORD}" | chpasswd \
+    || { echo "chpasswd failed for $SYSUSER" >&2; exit 1; }
+fi
 
 # Reload SSH so the banner change is picked up; never fatal.
 systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
