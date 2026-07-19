@@ -236,14 +236,30 @@ const IS_PREVIEW =
   /lovable\.(app|dev)$|lovableproject\.com$|localhost|127\.0\.0\.1/.test(window.location.hostname);
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-  return res.json();
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      credentials: "include",
+    });
+  } catch (e: any) {
+    throw new Error(`Network error: ${e?.message || "unable to reach panel API"}`);
+  }
+  if (!res.ok) {
+    const raw = await res.text().catch(() => "");
+    let msg = raw;
+    try {
+      const j = JSON.parse(raw);
+      msg = j.detail ?? j.error ?? j.message ?? raw;
+      if (Array.isArray(msg)) msg = msg.map((m: any) => m?.msg || JSON.stringify(m)).join("; ");
+      else if (typeof msg === "object") msg = JSON.stringify(msg);
+    } catch { /* not JSON */ }
+    throw new Error(msg || `Request failed (${res.status})`);
+  }
+  try { return await res.json() as T; } catch { return undefined as T; }
 }
+
 
 import { mock } from "./mock";
 
