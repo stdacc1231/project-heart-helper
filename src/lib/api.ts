@@ -112,7 +112,11 @@ export interface PanelSettings {
   plainPorts: number[];    // e.g. [80, 8080, 8880, 2052, 2082, 2086, 2095]
   // Per-protocol host/port overrides. Blank host = fall back to panel main domain.
   endpoints: Partial<Record<Protocol, ProtoEndpoint>>;
+  sshBanner?: string;
+  sshBannerVariables?: Record<string, string>;
+  autoSuspend?: boolean;
 }
+
 
 
 export interface SystemStatus {
