@@ -199,6 +199,7 @@ export interface UserDetail {
   tlsPorts?: number[];
   plainPorts?: number[];
   connectionProfiles?: ConnectionProfile[];
+  cdns?: Cdn[];
   usage?: { totalBytes: number; limitBytes: number; remainingBytes: number };
   liveRate?: { upBps: number; downBps: number; at: string | null };
   traffic?: {
@@ -209,6 +210,17 @@ export interface UserDetail {
     daily: { day: string; rxBytes: number; txBytes: number; totalBytes: number }[];
   };
 }
+
+export type CdnProtoGroup = "ssh" | "xray";
+export interface Cdn {
+  id: string;
+  name: string;
+  url: string;
+  protocols: CdnProtoGroup[];      // empty = both
+  accountIds: string[];            // empty = every account matching protocols
+  createdAt: string;
+}
+
 
 
 export interface Backup {
