@@ -193,6 +193,69 @@ function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-medium">Xray vs SSH · {RANGE_LABELS[range]}</h3>
+            <Badge variant="outline" className="mono text-[10px]">stacked GB</Badge>
+          </div>
+          <div className="h-56 w-full">
+            <ResponsiveContainer>
+              <AreaChart data={chartData} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="xr" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="sh" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor="hsl(var(--chart-2, 200 90% 55%))" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-2, 200 90% 55%))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} minTickGap={20} />
+                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} unit=" GB" />
+                <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Area type="monotone" dataKey="xray" name="Xray" stackId="1" stroke="hsl(var(--primary))" fill="url(#xr)" strokeWidth={2} />
+                <Area type="monotone" dataKey="ssh"  name="SSH"  stackId="1" stroke="hsl(var(--chart-2, 200 90% 55%))" fill="url(#sh)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-medium">Usage by protocol</h3>
+            <Badge variant="outline" className="mono text-[10px]">{perProtocol.length} protocols</Badge>
+          </div>
+          {perProtocol.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No account usage yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {(() => {
+                const max = Math.max(...perProtocol.map((p) => p.bytes), 1);
+                return perProtocol.map((p) => (
+                  <div key={p.protocol}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="mono">{p.protocol}</span>
+                      <span className="mono text-muted-foreground">{formatBytes(p.bytes)}</span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded bg-muted/40">
+                      <div
+                        className="h-full rounded bg-primary/70"
+                        style={{ width: `${(p.bytes / max) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
+        </Card>
+      </div>
+
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card className="p-4">
           <h3 className="mb-4 text-sm font-medium">Resources</h3>
           <div className="space-y-4">
             <ResourceRow icon={Cpu} label="CPU" percent={s?.cpuPercent ?? 0} sub={`${(s?.cpuPercent ?? 0).toFixed(1)}%`} />
