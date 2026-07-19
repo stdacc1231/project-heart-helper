@@ -93,7 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="absolute -bottom-1 -right-1 h-2 w-2 rounded-full bg-primary shadow-[0_0_10px_var(--color-primary)]" />
           </div>
           <div className="leading-tight">
-            <div className="font-display text-[15px] font-semibold tracking-tight aurora-text">AUTOSCRIPT</div>
+            <div className="font-display text-[15px] font-semibold tracking-tight aurora-text">GRVPN</div>
             <div className="mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Ops Panel</div>
           </div>
         </div>

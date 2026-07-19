@@ -585,7 +585,7 @@ def connection_profiles(a: dict) -> list[dict[str, Any]]:
         }
 
     # 443 (TLS) + 80 (plain), every routable transport per port.
-    for network in ("ws", "xhttp", "httpupgrade"):
+    for network in ("ws", "xhttp", "httpupgrade", "tcp"):
         out.append(_mk(443, True, network))
         out.append(_mk(80, False, network))
     return out
