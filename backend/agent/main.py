@@ -142,10 +142,7 @@ CREATE TABLE IF NOT EXISTS session_state (
     down_bps INTEGER NOT NULL DEFAULT 0,
     at TEXT NOT NULL
 );
-""" + "\n-- migrations\n" + " ".join(
-    f"ALTER TABLE traffic_samples ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0;"
-    for col in ("xray_rx", "xray_tx", "ssh_rx", "ssh_tx")
-).replace("ALTER", "-- ALTER") # migrations handled at runtime below
+"""
 
 
 
