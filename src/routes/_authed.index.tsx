@@ -51,6 +51,8 @@ function DashboardPage() {
 
   const periodRx = (traffic ?? []).reduce((sum, p) => sum + p.rxBytes, 0);
   const periodTx = (traffic ?? []).reduce((sum, p) => sum + p.txBytes, 0);
+  const xrayTotal = (traffic ?? []).reduce((s, p) => s + (p.xrayRxBytes ?? 0) + (p.xrayTxBytes ?? 0), 0);
+  const sshTotal  = (traffic ?? []).reduce((s, p) => s + (p.sshRxBytes ?? 0) + (p.sshTxBytes ?? 0), 0);
 
   const chartData = (traffic ?? []).map((p) => ({
     time: range !== "24h"
