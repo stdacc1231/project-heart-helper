@@ -166,11 +166,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="text-muted-foreground">agent</span>
               <span>online</span>
             </div>
-            <div className="mono hidden items-center gap-2 rounded-md border border-border/60 bg-card/60 px-3 py-1.5 text-xs lg:flex">
-              <Cloud className="h-3.5 w-3.5 text-accent" />
-              <span className="text-muted-foreground">CDN</span>
-              <span>Cloudflare</span>
-            </div>
+          </div>
+
           </div>
 
         </header>
