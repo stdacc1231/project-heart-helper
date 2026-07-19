@@ -63,26 +63,18 @@ function CdnsPage() {
               <Input value={edit.url ?? ""} onChange={(e) => setEdit({ ...edit, url: e.target.value })} placeholder="cdn.example.com" />
             </div>
             <div className="space-y-1.5">
-              <Label>Protocols (leave both empty for all)</Label>
-              <div className="flex items-center gap-4 pt-1">
-                {(["ssh", "xray"] as CdnProtoGroup[]).map((p) => {
-                  const on = (edit.protocols ?? []).includes(p);
-                  return (
-                    <label key={p} className="flex cursor-pointer items-center gap-2 text-sm">
-                      <Checkbox checked={on} onCheckedChange={(v) => {
-                        const set = new Set(edit.protocols ?? []);
-                        if (v) set.add(p); else set.delete(p);
-                        setEdit({ ...edit, protocols: Array.from(set) });
-                      }} /> {p.toUpperCase()}
-                    </label>
-                  );
-                })}
+              <Label>Protocol</Label>
+              <div className="flex items-center gap-2 pt-1">
+                <Badge variant="outline" className="uppercase">Xray</Badge>
+                <span className="text-xs text-muted-foreground">CDN endpoints are Xray-only.</span>
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Accounts (empty = every matching account)</Label>
+              <Label>Accounts (empty = every Xray account)</Label>
               <div className="max-h-40 overflow-y-auto rounded-md border p-2 text-sm">
-                {accounts.length === 0 ? <div className="text-muted-foreground">No accounts.</div> : accounts.map((a) => {
+                {accounts.filter((a) => a.protocol !== "ssh").length === 0 ? (
+                  <div className="text-muted-foreground">No Xray accounts.</div>
+                ) : accounts.filter((a) => a.protocol !== "ssh").map((a) => {
                   const on = (edit.accountIds ?? []).includes(a.id);
                   return (
                     <label key={a.id} className="flex cursor-pointer items-center gap-2 py-0.5">
