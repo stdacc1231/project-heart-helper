@@ -327,14 +327,16 @@ function TrialDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: 
       trial: true,
       expiresAt: new Date(Date.now() + Math.max(1, hours) * 3600_000).toISOString(),
     }),
-    onSuccess: () => {
+    onSuccess: (acc) => {
       qc.invalidateQueries({ queryKey: ["accounts"] });
-      toast.success(`Trial account created (${hours}h)`);
+      if (acc?.warning) toast.warning(`Trial saved as pending: ${acc.warning}`);
+      else toast.success(`Trial account created (${hours}h)`);
       onOpenChange(false);
       setUsername(""); setPassword(""); setTelegramId("");
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
