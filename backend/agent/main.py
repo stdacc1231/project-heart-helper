@@ -593,11 +593,169 @@ def revoke_account(a: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# SSH banner (with template variables) + auto-suspend scheduler
+# ---------------------------------------------------------------------------
+DEFAULT_SSH_BANNER = """<div style="text-align:center;">
+    <h4><font color="#ffff">⚡️GR VPN SSH</font></h4>
+    <h4><font color="green">⚡️Term of services</font></h4>
+    <h3><font color="yellow">⚡️No Spam</font></h3>
+    <h3><font color="#ffff">⚡️No Hacking</font></h3>
+    <h3><font color="blue">⚡️No DDOS</font></h3>
+    <h1><font color="#F6BE00">⚡️No Multi login, Auto delete</font></h1>
+    <h3><font color="red">GR VPN</font></h3>
+</div>
+"""
+
+BANNER_VARIABLES = {
+    "{{DOMAIN}}":       "Panel main domain",
+    "{{SERVER_IP}}":    "Server public IP",
+    "{{TOTAL_USERS}}":  "Total accounts in panel",
+    "{{ONLINE_USERS}}": "Currently online users (any protocol)",
+    "{{UPTIME}}":       "Server uptime (e.g. '3d 4h')",
+    "{{DATE}}":         "Server date (YYYY-MM-DD)",
+    "{{TIME}}":         "Server time (HH:MM UTC)",
+    # Per-user (only substituted for post-login MOTD, not pre-auth banner)
+    "{{USERNAME}}":     "SSH panel username",
+    "{{IP_LIMIT}}":     "Max concurrent IPs allowed",
+    "{{DAYS_LEFT}}":    "Days until account expiry",
+    "{{EXPIRES}}":      "Expiry date (YYYY-MM-DD)",
+    "{{USED_GB}}":      "Data used (GB)",
+    "{{QUOTA_GB}}":     "Quota (GB, 0 = unlimited)",
+    "{{REMAINING_GB}}": "Remaining quota (GB)",
+    "{{STATUS}}":       "active / locked / suspended",
+}
+
+
+def _server_ip() -> str:
+    try:
+        return subprocess.check_output(["bash", "-lc", "curl -fsS4 --max-time 2 ifconfig.me || hostname -I | awk '{print $1}'"], text=True).strip()
+    except Exception:
+        return ""
+
+
+def _fmt_uptime(seconds: float) -> str:
+    s = int(seconds); d, s = divmod(s, 86400); h, s = divmod(s, 3600); m, _ = divmod(s, 60)
+    if d: return f"{d}d {h}h"
+    if h: return f"{h}h {m}m"
+    return f"{m}m"
+
+
+def _global_banner_vars() -> dict[str, str]:
+    now = datetime.now(timezone.utc)
+    try:
+        total = 0; online = 0
+        with db() as c:
+            total = int(c.execute("SELECT COUNT(*) AS n FROM accounts").fetchone()["n"])
+            rows = c.execute("SELECT * FROM accounts").fetchall()
+            for r in rows:
+                if len(active_ips_for_account(row_to_account(r))) > 0:
+                    online += 1
+    except Exception:
+        total = 0; online = 0
+    try:
+        up = time.time() - psutil.boot_time()
+    except Exception:
+        up = 0
+    return {
+        "{{DOMAIN}}":       kv_get("panel.domain", PANEL_DOMAIN),
+        "{{SERVER_IP}}":    kv_get("cache.server_ip", "") or _server_ip(),
+        "{{TOTAL_USERS}}":  str(total),
+        "{{ONLINE_USERS}}": str(online),
+        "{{UPTIME}}":       _fmt_uptime(up),
+        "{{DATE}}":         now.strftime("%Y-%m-%d"),
+        "{{TIME}}":         now.strftime("%H:%M UTC"),
+    }
+
+
+def render_banner(template: str, extra: Optional[dict[str, str]] = None) -> str:
+    out = template
+    vars_ = _global_banner_vars()
+    if extra:
+        vars_.update(extra)
+    # Strip any per-user placeholders that weren't provided (pre-auth context)
+    for placeholder in BANNER_VARIABLES:
+        out = out.replace(placeholder, vars_.get(placeholder, ""))
+    return out
+
+
+def write_pre_auth_banner() -> None:
+    tpl = kv_get("ssh.banner", DEFAULT_SSH_BANNER)
+    try:
+        Path("/etc/grvpn-ssh-banner.html").write_text(render_banner(tpl), encoding="utf-8")
+    except Exception as exc:
+        print(f"banner-write-failed: {exc}", flush=True)
+
+
+def auto_suspend_tick() -> None:
+    """Lock accounts whose expiry has passed or whose quota is exhausted."""
+    if kv_get("panel.autoSuspend", "1") != "1":
+        return
+    now = datetime.now(timezone.utc)
+    to_lock: list[dict] = []
+    try:
+        with db() as c:
+            rows = c.execute("SELECT * FROM accounts WHERE status = 'active'").fetchall()
+            for r in rows:
+                a = row_to_account(r)
+                over_quota = False
+                if int(a.get("quotaGb") or 0) > 0:
+                    limit = int(a["quotaGb"]) * 1024 ** 3
+                    if int(a.get("usedBytes") or 0) >= limit:
+                        over_quota = True
+                try:
+                    exp = datetime.fromisoformat(a["expiresAt"].replace("Z", "+00:00"))
+                except Exception:
+                    exp = now + timedelta(days=365)
+                expired = exp <= now
+                if expired or over_quota:
+                    c.execute("UPDATE accounts SET status = 'suspended' WHERE id = ?", (a["id"],))
+                    a["_reason"] = "expired" if expired else "over_quota"
+                    to_lock.append(a)
+    except Exception as exc:
+        print(f"auto-suspend-tick-failed: {exc}", flush=True)
+        return
+    for a in to_lock:
+        try:
+            revoke_account(a)
+            log("audit", "account.autoSuspend",
+                f"Auto-suspended {a['username']} ({a.get('_reason')})",
+                actor="scheduler", target=a["username"], level="warn")
+        except Exception as exc:
+            print(f"auto-suspend-revoke-failed {a.get('username')}: {exc}", flush=True)
+
+
+def _scheduler_loop() -> None:
+    # First tick after 30s so the panel finishes booting; then every 60s.
+    time.sleep(30)
+    while True:
+        try:
+            auto_suspend_tick()
+        except Exception as exc:
+            print(f"scheduler-error: {exc}", flush=True)
+        # Refresh the pre-auth banner every 5 minutes so counters stay current.
+        try:
+            if int(time.time()) // 60 % 5 == 0:
+                write_pre_auth_banner()
+        except Exception:
+            pass
+        time.sleep(60)
+
+
+# ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
 app = FastAPI(title="Autoscript Panel Agent", version="1.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
                    allow_headers=["*"], allow_credentials=True)
+
+
+@app.on_event("startup")
+def _start_scheduler() -> None:
+    import threading
+    write_pre_auth_banner()
+    t = threading.Thread(target=_scheduler_loop, name="autoscript-scheduler", daemon=True)
+    t.start()
+
 
 
 # Secret-path gate + /api prefix stripping.
