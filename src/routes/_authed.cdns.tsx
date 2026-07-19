@@ -16,8 +16,8 @@ export const Route = createFileRoute("/_authed/cdns")({
   component: CdnsPage,
 });
 
-// CDN endpoints are Xray-only (SSH uses its own domain). We hardcode protocols=["xray"].
 const EMPTY: Partial<Cdn> = { name: "", url: "", protocols: ["xray"], accountIds: [] };
+const PROTO_OPTIONS = ["xray", "ssh"] as const;
 
 function CdnsPage() {
   const qc = useQueryClient();
@@ -63,31 +63,48 @@ function CdnsPage() {
               <Input value={edit.url ?? ""} onChange={(e) => setEdit({ ...edit, url: e.target.value })} placeholder="cdn.example.com" />
             </div>
             <div className="space-y-1.5">
-              <Label>Protocol</Label>
-              <div className="flex items-center gap-2 pt-1">
-                <Badge variant="outline" className="uppercase">Xray</Badge>
-                <span className="text-xs text-muted-foreground">CDN endpoints are Xray-only.</span>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Accounts (empty = every Xray account)</Label>
-              <div className="max-h-40 overflow-y-auto rounded-md border p-2 text-sm">
-                {accounts.filter((a) => a.protocol !== "ssh").length === 0 ? (
-                  <div className="text-muted-foreground">No Xray accounts.</div>
-                ) : accounts.filter((a) => a.protocol !== "ssh").map((a) => {
-                  const on = (edit.accountIds ?? []).includes(a.id);
+              <Label>Protocols</Label>
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                {PROTO_OPTIONS.map((p) => {
+                  const on = (edit.protocols ?? []).includes(p);
                   return (
-                    <label key={a.id} className="flex cursor-pointer items-center gap-2 py-0.5">
+                    <label key={p} className="flex cursor-pointer items-center gap-2 text-sm">
                       <Checkbox checked={on} onCheckedChange={(v) => {
-                        const set = new Set(edit.accountIds ?? []);
-                        if (v) set.add(a.id); else set.delete(a.id);
-                        setEdit({ ...edit, accountIds: Array.from(set) });
+                        const set = new Set(edit.protocols ?? []);
+                        if (v) set.add(p); else set.delete(p);
+                        // Reset account filter when protocol scope changes.
+                        setEdit({ ...edit, protocols: Array.from(set), accountIds: [] });
                       }} />
-                      <span className="mono uppercase text-[10px] text-muted-foreground">{a.protocol}</span>
-                      <span>{a.username}</span>
+                      <span className="uppercase">{p}</span>
                     </label>
                   );
                 })}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Accounts (empty = every matching account)</Label>
+              <div className="max-h-40 overflow-y-auto rounded-md border p-2 text-sm">
+                {(() => {
+                  const protos = edit.protocols ?? [];
+                  const matches = accounts.filter((a) =>
+                    protos.length === 0 ? true : protos.includes(a.protocol === "ssh" ? "ssh" : "xray")
+                  );
+                  if (matches.length === 0) return <div className="text-muted-foreground">No matching accounts.</div>;
+                  return matches.map((a) => {
+                    const on = (edit.accountIds ?? []).includes(a.id);
+                    return (
+                      <label key={a.id} className="flex cursor-pointer items-center gap-2 py-0.5">
+                        <Checkbox checked={on} onCheckedChange={(v) => {
+                          const set = new Set(edit.accountIds ?? []);
+                          if (v) set.add(a.id); else set.delete(a.id);
+                          setEdit({ ...edit, accountIds: Array.from(set) });
+                        }} />
+                        <span className="mono uppercase text-[10px] text-muted-foreground">{a.protocol}</span>
+                        <span>{a.username}</span>
+                      </label>
+                    );
+                  });
+                })()}
               </div>
             </div>
           </div>
@@ -112,8 +129,14 @@ function CdnsPage() {
                     <span className="font-mono text-xs text-muted-foreground break-all">{c.url}</span>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                    <Badge variant="outline" className="uppercase">Xray</Badge>
-                    <Badge variant="secondary">{c.accountIds.length ? `${c.accountIds.length} account${c.accountIds.length > 1 ? "s" : ""}` : "All Xray accounts"}</Badge>
+                    {(c.protocols?.length ? c.protocols : ["xray"]).map((p) => (
+                      <Badge key={p} variant="outline" className="uppercase">{p}</Badge>
+                    ))}
+                    <Badge variant="secondary">
+                      {c.accountIds.length
+                        ? `${c.accountIds.length} account${c.accountIds.length > 1 ? "s" : ""}`
+                        : `All ${(c.protocols?.length ? c.protocols : ["xray"]).map((p) => p.toUpperCase()).join(" + ")} accounts`}
+                    </Badge>
                   </div>
                 </div>
                 <div className="flex gap-2">
