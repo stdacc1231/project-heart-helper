@@ -40,9 +40,11 @@ const RANGE_LABELS: Record<TrafficRange, string> = {
 
 function DashboardPage() {
   const [range, setRange] = useState<TrafficRange>("24h");
-  const { data: s } = useQuery({ queryKey: ["status"], queryFn: () => api.system.status(), refetchInterval: 5000 });
-  const { data: accounts } = useQuery({ queryKey: ["accounts"], queryFn: () => api.accounts.list() });
-  const { data: traffic } = useQuery({ queryKey: ["traffic", range], queryFn: () => api.system.traffic(range), refetchInterval: 30000 });
+  const { data: s } = useQuery({ queryKey: ["status"], queryFn: () => api.system.status(), refetchInterval: 3000 });
+  const { data: accounts } = useQuery({ queryKey: ["accounts"], queryFn: () => api.accounts.list(), refetchInterval: 5000 });
+  const { data: traffic } = useQuery({ queryKey: ["traffic", range], queryFn: () => api.system.traffic(range), refetchInterval: 10000 });
+  const { data: live } = useQuery({ queryKey: ["connections"], queryFn: () => api.connections.list(), refetchInterval: 4000 });
+
 
   const online = accounts?.reduce((a, x) => a + x.online, 0) ?? 0;
   const totalUsage = accounts?.reduce((a, x) => a + x.usedBytes, 0) ?? 0;
@@ -62,10 +64,33 @@ function DashboardPage() {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat icon={Activity} label="Uptime" value={s ? formatDuration(s.uptimeSeconds) : "—"} sub={s?.hostname} />
-        <Stat icon={Users} label="Users online" value={String(online)} sub={`${accounts?.length ?? 0} total`} />
+        <Stat icon={Users} label="Users online" value={String(live?.length ?? online)} sub={`${accounts?.length ?? 0} total`} />
         <Stat icon={Wifi} label="Network" value={s ? `${s.netRxMbps.toFixed(1)} / ${s.netTxMbps.toFixed(1)} Mbps` : "—"} sub="Rx / Tx" />
         <Stat icon={HardDrive} label="Total account usage" value={formatBytes(totalUsage)} sub="All users" />
       </div>
+
+      <Card className="p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-medium">Online now</h3>
+          <Badge variant="outline" className="mono text-[10px]">{live?.length ?? 0} live · refresh 4s</Badge>
+        </div>
+        {live && live.length > 0 ? (
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {live.map((c) => (
+              <div key={c.id} className="flex items-center justify-between rounded-md border bg-muted/20 p-2 text-sm">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{c.username}</div>
+                  <div className="mono text-[11px] text-muted-foreground">{c.protocol.toUpperCase()} · {c.ip}</div>
+                </div>
+                <div className="mono text-[11px] text-right text-muted-foreground">
+                  ↓ {formatBytes(c.rxBytes)}<br />↑ {formatBytes(c.txBytes)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : <div className="text-sm text-muted-foreground">No users are online right now.</div>}
+      </Card>
+
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <Stat icon={HardDrive} label={`${RANGE_LABELS[range]} download`} value={formatBytes(periodRx)} sub="Selected period" />
