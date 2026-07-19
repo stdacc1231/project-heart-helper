@@ -35,7 +35,9 @@ const groups: NavGroup[] = [
     { to: "/wallet",      label: "Wallet",       icon: Wallet },
   ]},
   { label: "System", items: [
+    { to: "/xray",        label: "Xray core",    icon: Cpu },
     { to: "/cdns",        label: "CDN endpoints",icon: Cloud },
+
     { to: "/backups",     label: "Backups",      icon: HardDrive },
     { to: "/bot",         label: "Telegram Bot", icon: Bot },
     { to: "/logs",        label: "Logs",         icon: ScrollText },
