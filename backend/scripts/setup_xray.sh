@@ -88,11 +88,51 @@ if cfg_path.exists() and cfg_path.stat().st_size:
     except Exception:
         old = {}
 
-def clients(tag):
-    for inbound in old.get("inbounds", []):
-        if inbound.get("tag") == tag:
-            return inbound.get("settings", {}).get("clients", []) or []
+def clients(*tags):
+    """Return the client list from the first inbound tag that had users,
+    so clients survive upgrades between transports."""
+    for tag in tags:
+        for inbound in old.get("inbounds", []):
+            if inbound.get("tag") == tag:
+                users = inbound.get("settings", {}).get("clients", []) or []
+                if users:
+                    return users
     return []
+
+def ws_inbound(tag, port, proto, path, extra=None):
+    settings = {"clients": clients(tag, f"{proto}-ws", f"{proto}-xh", f"{proto}-hu")}
+    if proto == "vless":
+        settings["decryption"] = "none"
+    if extra:
+        settings.update(extra)
+    return {
+        "tag": tag, "listen": "127.0.0.1", "port": port, "protocol": proto,
+        "settings": settings,
+        "streamSettings": {"network": "ws", "wsSettings": {"path": path},
+            "sockopt": {"tcpFastOpen": True, "tcpNoDelay": True, "tcpKeepAliveInterval": 30}},
+    }
+
+def xh_inbound(tag, port, proto, path):
+    settings = {"clients": clients(tag, f"{proto}-ws", f"{proto}-xh", f"{proto}-hu")}
+    if proto == "vless":
+        settings["decryption"] = "none"
+    return {
+        "tag": tag, "listen": "127.0.0.1", "port": port, "protocol": proto,
+        "settings": settings,
+        "streamSettings": {"network": "xhttp", "xhttpSettings": {"path": path, "mode": "auto"},
+            "sockopt": {"tcpFastOpen": True, "tcpNoDelay": True}},
+    }
+
+def hu_inbound(tag, port, proto, path):
+    settings = {"clients": clients(tag, f"{proto}-ws", f"{proto}-xh", f"{proto}-hu")}
+    if proto == "vless":
+        settings["decryption"] = "none"
+    return {
+        "tag": tag, "listen": "127.0.0.1", "port": port, "protocol": proto,
+        "settings": settings,
+        "streamSettings": {"network": "httpupgrade", "httpupgradeSettings": {"path": path},
+            "sockopt": {"tcpFastOpen": True, "tcpNoDelay": True}},
+    }
 
 cfg = {
   "log": {"loglevel": "warning", "access": "/var/log/xray/access.log", "error": "/var/log/xray/error.log"},
@@ -109,24 +149,18 @@ cfg = {
       "tag": "api-in", "listen": "127.0.0.1", "port": 10085, "protocol": "dokodemo-door",
       "settings": {"address": "127.0.0.1", "port": 10085, "network": "tcp"},
     },
-    {
-      "tag": "vmess-ws", "listen": "127.0.0.1", "port": 10001, "protocol": "vmess",
-      "settings": {"clients": clients("vmess-ws")},
-      "streamSettings": {"network": "ws", "wsSettings": {"path": "/vmess"},
-        "sockopt": {"tcpFastOpen": True, "tcpNoDelay": True, "tcpKeepAliveInterval": 30}},
-    },
-    {
-      "tag": "vless-ws", "listen": "127.0.0.1", "port": 10002, "protocol": "vless",
-      "settings": {"clients": clients("vless-ws"), "decryption": "none"},
-      "streamSettings": {"network": "ws", "wsSettings": {"path": "/vless"},
-        "sockopt": {"tcpFastOpen": True, "tcpNoDelay": True, "tcpKeepAliveInterval": 30}},
-    },
-    {
-      "tag": "trojan-ws", "listen": "127.0.0.1", "port": 10003, "protocol": "trojan",
-      "settings": {"clients": clients("trojan-ws")},
-      "streamSettings": {"network": "ws", "wsSettings": {"path": "/trojan"},
-        "sockopt": {"tcpFastOpen": True, "tcpNoDelay": True, "tcpKeepAliveInterval": 30}},
-    },
+    # WebSocket inbounds
+    ws_inbound("vmess-ws",  10001, "vmess",  "/vmess"),
+    ws_inbound("vless-ws",  10002, "vless",  "/vless"),
+    ws_inbound("trojan-ws", 10003, "trojan", "/trojan"),
+    # xHTTP inbounds
+    xh_inbound("vmess-xh",  10011, "vmess",  "/vmess-xh"),
+    xh_inbound("vless-xh",  10012, "vless",  "/vless-xh"),
+    xh_inbound("trojan-xh", 10013, "trojan", "/trojan-xh"),
+    # HTTPUpgrade inbounds
+    hu_inbound("vmess-hu",  10021, "vmess",  "/vmess-hu"),
+    hu_inbound("vless-hu",  10022, "vless",  "/vless-hu"),
+    hu_inbound("trojan-hu", 10023, "trojan", "/trojan-hu"),
   ],
   "outbounds": [
     {"protocol": "freedom", "tag": "direct",
@@ -137,6 +171,7 @@ cfg = {
 }
 cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
 PY
+
 
 # Kernel tuning: BBR + bigger buffers so xray/ssh saturate the link.
 cat >/etc/sysctl.d/99-autoscript.conf <<'EOF'
