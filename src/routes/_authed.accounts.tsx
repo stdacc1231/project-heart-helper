@@ -151,8 +151,8 @@ function AccountsPage() {
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" title="Copy subscription URL" onClick={() => copySub(a.id)}><Copy className="h-4 w-4" /></Button>
                   <Button variant="ghost" size="icon" title="Send via Telegram" onClick={() => api.accounts.sendTelegram(a.id).then(() => toast.success("Sent"))}><Send className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" asChild title="Edit">
-                    <Link to="/accounts/$id" params={{ id: a.id }}><Pencil className="h-4 w-4" /></Link>
+                  <Button variant="ghost" size="icon" title="Edit" onClick={() => setEditId(a.id)}>
+                    <Pencil className="h-4 w-4" />
                   </Button>
                   <Button variant="ghost" size="icon" title="Delete"
                     onClick={() => { if (confirm(`Delete ${a.username}?`)) remove.mutate(a.id); }}>
@@ -170,9 +170,11 @@ function AccountsPage() {
 
       <CreateDialog open={open} onOpenChange={setOpen} />
       <TrialDialog open={trialOpen} onOpenChange={setTrialOpen} />
+      <EditDialog id={editId} onOpenChange={(b) => !b && setEditId(null)} />
     </div>
   );
 }
+
 
 function CreateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (b: boolean) => void }) {
   const { data: plans } = useQuery({ queryKey: ["plans"], queryFn: () => api.plans.list() });
