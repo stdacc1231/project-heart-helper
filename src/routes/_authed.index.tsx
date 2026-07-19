@@ -40,9 +40,11 @@ const RANGE_LABELS: Record<TrafficRange, string> = {
 
 function DashboardPage() {
   const [range, setRange] = useState<TrafficRange>("24h");
-  const { data: s } = useQuery({ queryKey: ["status"], queryFn: () => api.system.status(), refetchInterval: 5000 });
-  const { data: accounts } = useQuery({ queryKey: ["accounts"], queryFn: () => api.accounts.list() });
-  const { data: traffic } = useQuery({ queryKey: ["traffic", range], queryFn: () => api.system.traffic(range), refetchInterval: 30000 });
+  const { data: s } = useQuery({ queryKey: ["status"], queryFn: () => api.system.status(), refetchInterval: 3000 });
+  const { data: accounts } = useQuery({ queryKey: ["accounts"], queryFn: () => api.accounts.list(), refetchInterval: 5000 });
+  const { data: traffic } = useQuery({ queryKey: ["traffic", range], queryFn: () => api.system.traffic(range), refetchInterval: 10000 });
+  const { data: live } = useQuery({ queryKey: ["connections"], queryFn: () => api.connections.list(), refetchInterval: 4000 });
+
 
   const online = accounts?.reduce((a, x) => a + x.online, 0) ?? 0;
   const totalUsage = accounts?.reduce((a, x) => a + x.usedBytes, 0) ?? 0;
