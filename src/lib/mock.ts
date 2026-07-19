@@ -1,9 +1,10 @@
 // Mock backend for Lovable preview. Real Python agent replaces this on the VPS.
 import type {
-  Account, Alert, Backup, BotSettings, Invoice, LiveConnection, LogEntry,
+  Account, Alert, Backup, BotSettings, Cdn, Invoice, LiveConnection, LogEntry,
   PanelSettings, Payment, Plan, Protocol, SystemStatus, TrafficPoint,
   UserDetail, VersionInfo, WalletTx,
 } from "./api";
+
 
 
 const STORAGE = "autoscript_mock_v4";
