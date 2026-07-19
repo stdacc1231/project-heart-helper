@@ -151,9 +151,10 @@ function AccountsPage() {
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" title="Copy subscription URL" onClick={() => copySub(a.id)}><Copy className="h-4 w-4" /></Button>
                   <Button variant="ghost" size="icon" title="Send via Telegram" onClick={() => api.accounts.sendTelegram(a.id).then(() => toast.success("Sent"))}><Send className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" title="Edit" onClick={() => setEditId(a.id)}>
-                    <Pencil className="h-4 w-4" />
+                  <Button variant="ghost" size="icon" title="Open / edit" asChild>
+                    <Link to="/accounts/$id" params={{ id: a.id }}><Pencil className="h-4 w-4" /></Link>
                   </Button>
+
                   <Button variant="ghost" size="icon" title="Delete"
                     onClick={() => { if (confirm(`Delete ${a.username}?`)) remove.mutate(a.id); }}>
                     <Trash2 className="h-4 w-4 text-destructive" />
