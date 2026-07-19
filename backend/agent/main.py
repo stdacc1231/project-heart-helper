@@ -495,56 +495,89 @@ def _vmess_link_net(username: str, host: str, port: int, uid: str, *, tls: bool,
     return "vmess://" + base64.b64encode(json.dumps(cfg, separators=(",", ":")).encode()).decode()
 
 
+def _xray_uri(proto: str, username: str, host: str, port: int, uid: str, *, tls: bool, network: str = "ws") -> str:
+    if network == "tcp":
+        path = ""
+    elif network == "ws":
+        path = f"/{proto}"
+    else:  # xhttp
+        path = f"/{proto}-xh"
+    security = "tls" if tls else "none"
+    suffix = quote(username, safe="")
+    query = f"type={network}&security={security}&host={quote(host)}&sni={quote(host)}"
+    if path:
+        query += f"&path={quote(path, safe='')}"
+    if proto == "vless":
+        return f"vless://{uid}@{host}:{port}?{query}#{suffix}"
+    return f"trojan://{uid}@{host}:{port}?{query}#{suffix}"
+
+
+def _vmess_link_tcp(username: str, host: str, port: int, uid: str, *, tls: bool, network: str) -> str:
+    if network == "tcp":
+        path = ""
+    elif network == "ws":
+        path = "/vmess"
+    else:
+        path = "/vmess-xh"
+    cfg = {
+        "v": "2", "ps": username, "add": host, "port": str(port), "id": uid,
+        "aid": "0", "scy": "auto", "net": network, "type": "none",
+        "host": host, "path": path, "tls": "tls" if tls else "", "sni": host if tls else "",
+    }
+    return "vmess://" + base64.b64encode(json.dumps(cfg, separators=(",", ":")).encode()).decode()
+
+
 def connection_profiles(a: dict) -> list[dict[str, Any]]:
+    """Only ports 80 (plain) and 443 (TLS). Users add extra Cloudflare ports themselves."""
     host = _proto_host(a["protocol"])
-    tls_ports = _tls_ports()
-    plain_ports = _plain_ports()
     out: list[dict[str, Any]] = []
     if a["protocol"] == "ssh":
         login_user = ssh_login_username(a["username"])
+        pw = a.get("password") or ""
         out.append({
-            "label": "SSH direct", "network": "tcp", "security": "none", "host": host,
-            "port": 22, "path": "", "username": login_user, "password": a.get("password") or "",
-            "link": f"ssh://{quote(login_user)}:{quote(a.get('password') or '')}@{host}:22",
-            "text": f"Host: {host}\nPort: 22\nUsername: {login_user}\nPassword: {a.get('password') or ''}",
+            "label": "SSH direct (TCP :22)", "network": "tcp", "security": "none", "host": host,
+            "port": 22, "path": "", "username": login_user, "password": pw,
+            "link": f"ssh://{quote(login_user)}:{quote(pw)}@{host}:22",
+            "text": f"Host: {host}\nPort: 22\nUsername: {login_user}\nPassword: {pw}",
         })
-        for p in tls_ports:
-            out.append({
-                "label": f"SSH WS · TLS :{p}", "network": "ws", "security": "tls", "host": host,
-                "port": p, "path": "/", "username": login_user, "password": a.get("password") or "",
-                "link": f"ssh-ws://{quote(login_user)}:{quote(a.get('password') or '')}@{host}:{p}/?security=tls",
-                "text": f"Host/SNI: {host}\nPort: {p}\nTLS: on\nWebSocket path: /\nUsername: {login_user}\nPassword: {a.get('password') or ''}",
-            })
-        for p in plain_ports:
-            out.append({
-                "label": f"SSH WS · plain :{p}", "network": "ws", "security": "none", "host": host,
-                "port": p, "path": "/", "username": login_user, "password": a.get("password") or "",
-                "link": f"ssh-ws://{quote(login_user)}:{quote(a.get('password') or '')}@{host}:{p}/?security=none",
-                "text": f"Host: {host}\nPort: {p}\nTLS: off\nWebSocket path: /\nUsername: {login_user}\nPassword: {a.get('password') or ''}",
-            })
+        out.append({
+            "label": "SSH WS · TLS :443", "network": "ws", "security": "tls", "host": host,
+            "port": 443, "path": "/", "username": login_user, "password": pw,
+            "link": f"ssh-ws://{quote(login_user)}:{quote(pw)}@{host}:443/?security=tls",
+            "text": f"Host/SNI: {host}\nPort: 443\nTLS: on\nWebSocket path: /\nUsername: {login_user}\nPassword: {pw}",
+        })
+        out.append({
+            "label": "SSH WS · plain :80", "network": "ws", "security": "none", "host": host,
+            "port": 80, "path": "/", "username": login_user, "password": pw,
+            "link": f"ssh-ws://{quote(login_user)}:{quote(pw)}@{host}:80/?security=none",
+            "text": f"Host: {host}\nPort: 80\nTLS: off\nWebSocket path: /\nUsername: {login_user}\nPassword: {pw}",
+        })
         return out
+
     uid = a.get("uuid") or ""
     proto = a["protocol"]
+
     def _mk(port: int, tls: bool, network: str):
         if proto == "vmess":
-            link = _vmess_link_net(a["username"], host, port, uid, tls=tls, network=network)
+            link = _vmess_link_tcp(a["username"], host, port, uid, tls=tls, network=network)
         else:
             link = _xray_uri(proto, a["username"], host, port, uid, tls=tls, network=network)
-        transport = "WS" if network == "ws" else "xHTTP"
-        sec = "TLS" if tls else "plain"
-        path = f"/{proto}" if network == "ws" else f"/{proto}-xh"
+        transport = {"ws": "WS", "xhttp": "xHTTP", "tcp": "TCP"}[network]
+        sec = "TLS" if tls else "nTLS"
+        path = "" if network == "tcp" else (f"/{proto}" if network == "ws" else f"/{proto}-xh")
         return {
             "label": f"{proto.upper()} · {transport} · {sec} :{port}",
             "network": network, "security": "tls" if tls else "none",
             "host": host, "port": port, "path": path, "link": link, "text": link,
         }
-    for p in tls_ports:
-        out.append(_mk(p, True, "ws"))
-        out.append(_mk(p, True, "xhttp"))
-    for p in plain_ports:
-        out.append(_mk(p, False, "ws"))
-        out.append(_mk(p, False, "xhttp"))
+
+    # Only 443 (TLS) + 80 (plain). Every xray transport shown for each.
+    for network in ("ws", "xhttp", "tcp"):
+        out.append(_mk(443, True, network))
+        out.append(_mk(80, False, network))
     return out
+
+
 
 
 
