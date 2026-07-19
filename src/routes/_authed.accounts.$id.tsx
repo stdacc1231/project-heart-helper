@@ -75,6 +75,14 @@ function AccountDetail() {
         <Metric icon={Wifi} label="Speed" value={`↓ ${speed(data.speedDnKbps)} / ↑ ${speed(data.speedUpKbps)}`} sub="Mbps" />
       </div>
 
+      <div className="grid gap-3 md:grid-cols-4">
+        <Metric icon={HardDrive} label="Today" value={formatBytes(detail?.traffic?.today ?? 0)} sub="Rx + Tx" />
+        <Metric icon={HardDrive} label="This week" value={formatBytes(detail?.traffic?.week ?? 0)} sub="Since Monday" />
+        <Metric icon={HardDrive} label="This month" value={formatBytes(detail?.traffic?.month ?? 0)} sub="Since day 1" />
+        <Metric icon={HardDrive} label="Last 30 days" value={formatBytes(detail?.traffic?.last30d ?? 0)} sub="Rolling window" />
+      </div>
+
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-4">
           <h3 className="mb-3 text-sm font-medium">Details</h3>
